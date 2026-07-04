@@ -33,13 +33,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         >
           Continue with GitHub
         </Link>
-
-        <Link
-          href="/setup"
-          className="mt-4 text-sm text-slate-400 underline-offset-4 hover:text-slate-200 hover:underline"
-        >
-          View setup checklist
-        </Link>
       </div>
     </main>
   );

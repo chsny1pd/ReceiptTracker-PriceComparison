@@ -5,15 +5,21 @@ const navItems = [
   { href: "/receipts", label: "Receipts" },
   { href: "/compare", label: "Compare" },
   { href: "/balances", label: "Balances" },
-  { href: "/setup", label: "Setup" },
 ];
 
 type AppShellProps = {
   children: React.ReactNode;
-  email: string;
+  avatarUrl: string | null;
+  displayName: string;
 };
 
-export function AppShell({ children, email }: AppShellProps) {
+export function AppShell({ children, avatarUrl, displayName }: AppShellProps) {
+  const initials = displayName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
       <header className="border-b border-slate-300 bg-white">
@@ -38,9 +44,22 @@ export function AppShell({ children, email }: AppShellProps) {
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden max-w-40 truncate text-sm text-slate-600 sm:inline">
-              {email}
-            </span>
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="h-9 w-9 rounded-full border border-slate-300 object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-xs font-semibold text-slate-600"
+                aria-label={displayName}
+                title={displayName}
+              >
+                {initials || "?"}
+              </span>
+            )}
             <form action="/auth/sign-out" method="post">
               <button
                 type="submit"

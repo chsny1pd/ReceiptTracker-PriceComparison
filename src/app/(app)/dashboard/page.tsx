@@ -1,32 +1,53 @@
 import Link from "next/link";
 
+import { ReceiptCarousel } from "@/components/dashboard/receipt-carousel";
+import type { ReceiptCardData } from "@/components/dashboard/receipt-card";
+import {
+  SpendingOverviewChart,
+  type DailySpendingPoint,
+} from "@/components/dashboard/spending-overview-chart";
 import { PageHeader } from "@/components/page-header";
 import { getRequiredUser } from "@/lib/auth";
-import { formatMoney } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 import { relationName } from "@/lib/supabase-helpers";
 
-const actions = [
-  {
-    title: "Log a receipt",
-    description: "Capture store, date, line items, units, and optional image.",
-    href: "/receipts/new",
+function toReceiptCard(
+  receipt: {
+    id: string;
+    purchased_at: string;
+    total: number | string;
+    stores: unknown;
   },
-  {
-    title: "Compare prices",
-    description: "See which store is cheaper for a product from your receipts.",
-    href: "/compare",
-  },
-  {
-    title: "Check balances",
-    description: "See netted who-owes-whom balances from unsettled splits.",
-    href: "/balances",
-  },
-  {
-    title: "Service setup",
-    description: "Verify Supabase and Cloudflare R2 connection status.",
-    href: "/setup",
-  },
-];
+): ReceiptCardData {
+  return {
+    id: receipt.id,
+    purchased_at: receipt.purchased_at,
+    total: Number(receipt.total),
+    storeName: relationName(receipt.stores, "Unknown store"),
+  };
+}
+
+function buildDailySpending(receipts: ReceiptCardData[]): DailySpendingPoint[] {
+  const byDate = new Map<string, ReceiptCardData[]>();
+
+  for (const receipt of receipts) {
+    const existing = byDate.get(receipt.purchased_at) ?? [];
+    existing.push(receipt);
+    byDate.set(receipt.purchased_at, existing);
+  }
+
+  return [...byDate.entries()]
+    .map(([date, dayReceipts]) => ({
+      date,
+      total: dayReceipts.reduce((sum, receipt) => sum + receipt.total, 0),
+      receipts: dayReceipts.sort((a, b) => b.total - a.total),
+    }))
+    .sort(
+      (a, b) =>
+        new Date(`${a.date}T00:00:00`).getTime() -
+        new Date(`${b.date}T00:00:00`).getTime(),
+    );
+}
 
 export default async function DashboardPage() {
   const { supabase, user } = await getRequiredUser();
@@ -36,33 +57,32 @@ export default async function DashboardPage() {
     .select("*", { count: "exact", head: true })
     .eq("owner_user_id", user.id);
 
-  const { data: recentReceipts } = await supabase
+  const { data: receipts } = await supabase
     .from("receipts")
     .select("id, purchased_at, total, stores(name)")
     .eq("owner_user_id", user.id)
     .order("purchased_at", { ascending: false })
-    .limit(3);
+    .order("created_at", { ascending: false });
+
+  const receiptCards = (receipts ?? []).map(toReceiptCard);
+  const dailySpending = buildDailySpending(receiptCards);
+  const carouselReceipts = receiptCards.slice(0, 10);
+  const recentReceipts = receiptCards.slice(0, 3);
 
   return (
     <>
       <PageHeader
-        title="Receipt workspace"
-        description="Start with a receipt, then compare prices or review balances."
+        title="Dashboard"
+        description="Overview of your spending and recent receipts."
       />
 
-      <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {actions.map((action) => (
-          <Link
-            key={action.href}
-            href={action.href}
-            className="rounded-lg border border-slate-300 bg-white p-5 transition hover:border-emerald-500"
-          >
-            <h2 className="text-lg font-semibold">{action.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {action.description}
-            </p>
-          </Link>
-        ))}
+      <section className="mb-8">
+        <SpendingOverviewChart dailySpending={dailySpending} />
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-4 text-lg font-semibold">Recent receipts</h2>
+        <ReceiptCarousel receipts={carouselReceipts} />
       </section>
 
       <section className="rounded-lg border border-slate-300 bg-white p-5">
@@ -71,19 +91,19 @@ export default async function DashboardPage() {
           {receiptCount ?? 0} receipt{(receiptCount ?? 0) === 1 ? "" : "s"}{" "}
           logged so far.
         </p>
-        {recentReceipts && recentReceipts.length > 0 ? (
+        {recentReceipts.length > 0 ? (
           <ul className="mt-4 divide-y divide-slate-200">
             {recentReceipts.map((receipt) => (
               <li key={receipt.id} className="flex items-center justify-between py-3">
                 <div>
-                  <p className="font-medium">
-                    {relationName(receipt.stores, "Unknown store")}
+                  <p className="font-medium">{receipt.storeName}</p>
+                  <p className="text-sm text-slate-600">
+                    {formatDate(receipt.purchased_at)}
                   </p>
-                  <p className="text-sm text-slate-600">{receipt.purchased_at}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-medium tabular-nums">
-                    {formatMoney(Number(receipt.total))}
+                    {formatMoney(receipt.total)}
                   </p>
                   <Link
                     href={`/receipts/${receipt.id}`}

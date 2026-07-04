@@ -29,12 +29,6 @@ export default function Home() {
             >
               Open dashboard
             </Link>
-            <Link
-              href="/setup"
-              className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-400 px-5 text-sm font-semibold transition hover:border-emerald-600"
-            >
-              Setup guide
-            </Link>
           </div>
         </div>
 

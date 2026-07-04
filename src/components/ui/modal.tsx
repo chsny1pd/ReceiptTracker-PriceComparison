@@ -7,9 +7,16 @@ type ModalProps = {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  panelClassName?: string;
 };
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  panelClassName,
+}: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -55,7 +62,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative w-full max-w-md rounded-lg border border-slate-300 bg-white p-5 shadow-xl"
+        className={`relative w-full rounded-lg border border-slate-300 bg-white p-5 shadow-xl ${panelClassName ?? "max-w-md"}`}
       >
         <div className="mb-4 flex items-center justify-between gap-4">
           <h3 id={titleId} className="text-lg font-semibold">
