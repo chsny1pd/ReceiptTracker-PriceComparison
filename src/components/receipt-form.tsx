@@ -9,13 +9,19 @@ import {
   type ReceiptLineInput,
 } from "@/app/actions/receipts";
 import { FormErrorSummary } from "@/components/form-error-summary";
-import { formatUnitPrice } from "@/lib/format";
+import { Modal } from "@/components/ui/modal";
+import { PendingNotice } from "@/components/ui/pending-notice";
+import { Spinner } from "@/components/ui/spinner";
+import { formatMoney, formatUnitPrice } from "@/lib/format";
 import type { Product, SpendlyUnit, Store } from "@/lib/types";
 import {
   normalizeReceiptItem,
   UNITS_BY_CATEGORY,
   unitCategoryForUnit,
 } from "@/lib/units";
+
+const ADD_STORE_VALUE = "__add_store__";
+const ADD_PRODUCT_VALUE = "__add_product__";
 
 type DraftLine = {
   key: string;
@@ -43,23 +49,32 @@ function emptyLine(products: Product[]): DraftLine {
   };
 }
 
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
 export function ReceiptForm({ stores, products }: ReceiptFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isAddingStore, startAddStoreTransition] = useTransition();
+  const [isAddingProduct, startAddProductTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [storeId, setStoreId] = useState(stores[0]?.id ?? "");
   const [purchasedAt, setPurchasedAt] = useState(
     new Date().toISOString().slice(0, 10),
   );
-  const [subtotal, setSubtotal] = useState("0");
   const [tax, setTax] = useState("0");
-  const [total, setTotal] = useState("0");
   const [notes, setNotes] = useState("");
   const [imageObjectKey, setImageObjectKey] = useState<string | null>(null);
   const [imageName, setImageName] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [lines, setLines] = useState<DraftLine[]>(() =>
     products.length > 0 ? [emptyLine(products)] : [],
+  );
+  const [storeModalOpen, setStoreModalOpen] = useState(false);
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [productModalLineKey, setProductModalLineKey] = useState<string | null>(
+    null,
   );
   const [newStoreName, setNewStoreName] = useState("");
   const [newProductName, setNewProductName] = useState("");
@@ -72,18 +87,113 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     [products],
   );
 
+  const computedSubtotal = useMemo(
+    () =>
+      roundMoney(
+        lines.reduce((sum, line) => sum + (Number(line.lineTotal) || 0), 0),
+      ),
+    [lines],
+  );
+
+  const computedTotal = useMemo(
+    () => roundMoney(computedSubtotal + (Number(tax) || 0)),
+    [computedSubtotal, tax],
+  );
+
+  const isBusy =
+    isPending || isAddingStore || isAddingProduct || uploadingImage;
+
   function updateLine(key: string, patch: Partial<DraftLine>) {
     setLines((current) =>
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
   }
 
-  function handleProductChange(key: string, productId: string) {
+  function handleStoreSelect(value: string) {
+    if (value === ADD_STORE_VALUE) {
+      setStoreModalOpen(true);
+      return;
+    }
+
+    setStoreId(value);
+  }
+
+  function handleProductSelect(lineKey: string, productId: string) {
+    if (productId === ADD_PRODUCT_VALUE) {
+      setProductModalLineKey(lineKey);
+      setProductModalOpen(true);
+      return;
+    }
+
     const product = productMap.get(productId);
-    updateLine(key, {
+    updateLine(lineKey, {
       productId,
       rawName: product?.name ?? "",
       unit: product?.default_unit ?? "each",
+    });
+  }
+
+  function handleAddStore() {
+    setError(null);
+    const formData = new FormData();
+    formData.set("name", newStoreName);
+
+    startAddStoreTransition(async () => {
+      const result = await createStore(formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      if (result.data) {
+        setStoreId(result.data.id);
+      }
+
+      setNewStoreName("");
+      setStoreModalOpen(false);
+      router.refresh();
+    });
+  }
+
+  function handleAddProduct() {
+    setError(null);
+    const formData = new FormData();
+    formData.set("name", newProductName);
+    formData.set("unitCategory", newProductCategory);
+
+    startAddProductTransition(async () => {
+      const result = await createProduct(formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      if (result.data) {
+        const lineKey = productModalLineKey;
+        if (lineKey) {
+          updateLine(lineKey, {
+            productId: result.data.id,
+            rawName: result.data.name,
+            unit: result.data.default_unit,
+          });
+        } else if (lines.length === 0) {
+          setLines([
+            {
+              key: crypto.randomUUID(),
+              productId: result.data.id,
+              rawName: result.data.name,
+              quantity: "1",
+              unit: result.data.default_unit,
+              lineTotal: "0",
+            },
+          ]);
+        }
+      }
+
+      setNewProductName("");
+      setProductModalOpen(false);
+      setProductModalLineKey(null);
+      router.refresh();
     });
   }
 
@@ -145,21 +255,33 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     event.preventDefault();
     setError(null);
 
-    const parsedItems: ReceiptLineInput[] = lines.map((line) => ({
-      productId: line.productId,
-      rawName: line.rawName,
-      quantity: Number(line.quantity),
-      unit: line.unit,
-      lineTotal: Number(line.lineTotal),
-    }));
+    if (!storeId) {
+      setError("Select or add a store.");
+      return;
+    }
+
+    const parsedItems: ReceiptLineInput[] = lines
+      .filter((line) => line.productId)
+      .map((line) => ({
+        productId: line.productId,
+        rawName: line.rawName,
+        quantity: Number(line.quantity),
+        unit: line.unit,
+        lineTotal: Number(line.lineTotal),
+      }));
+
+    if (parsedItems.length === 0) {
+      setError("Add at least one line item with a product.");
+      return;
+    }
 
     startTransition(async () => {
       const result = await createReceipt({
         storeId,
         purchasedAt,
-        subtotal: Number(subtotal),
-        tax: Number(tax),
-        total: Number(total),
+        subtotal: computedSubtotal,
+        tax: Number(tax) || 0,
+        total: computedTotal,
         notes,
         imageObjectKey: imageObjectKey ?? undefined,
         items: parsedItems,
@@ -171,304 +293,366 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     });
   }
 
+  let pendingMessage = "Saving receipt...";
+  if (uploadingImage) {
+    pendingMessage = "Uploading receipt image...";
+  } else if (isAddingStore) {
+    pendingMessage = "Adding store...";
+  } else if (isAddingProduct) {
+    pendingMessage = "Adding product...";
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
-      <FormErrorSummary message={error} />
+    <>
+      <PendingNotice show={isBusy} message={pendingMessage} />
 
-      <section className="rounded-lg border border-slate-300 bg-white p-5">
-        <h2 className="text-lg font-semibold">Receipt details</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="grid gap-2 text-sm">
-            <span className="font-medium">Store</span>
-            <select
-              value={storeId}
-              onChange={(event) => setStoreId(event.target.value)}
-              required
-              className="h-11 rounded-lg border border-slate-300 px-3"
-            >
-              <option value="" disabled>
-                Select a store
-              </option>
-              {stores.map((store) => (
-                <option key={store.id} value={store.id}>
-                  {store.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm">
-            <span className="font-medium">Purchase date</span>
-            <input
-              type="date"
-              value={purchasedAt}
-              onChange={(event) => setPurchasedAt(event.target.value)}
-              required
-              className="h-11 rounded-lg border border-slate-300 px-3"
-            />
-          </label>
-          <label className="grid gap-2 text-sm">
-            <span className="font-medium">Subtotal</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={subtotal}
-              onChange={(event) => setSubtotal(event.target.value)}
-              required
-              className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
-            />
-          </label>
-          <label className="grid gap-2 text-sm">
-            <span className="font-medium">Tax</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={tax}
-              onChange={(event) => setTax(event.target.value)}
-              required
-              className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
-            />
-          </label>
-          <label className="grid gap-2 text-sm">
-            <span className="font-medium">Total</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={total}
-              onChange={(event) => setTotal(event.target.value)}
-              required
-              className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
-            />
-          </label>
-          <label className="grid gap-2 text-sm md:col-span-2">
-            <span className="font-medium">Notes</span>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={3}
-              className="rounded-lg border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="grid gap-2 text-sm md:col-span-2">
-            <span className="font-medium">Receipt image (optional)</span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(event) =>
-                void handleImageChange(event.target.files?.[0] ?? null)
-              }
-              className="rounded-lg border border-slate-300 px-3 py-2"
-            />
-            {uploadingImage ? (
-              <span className="text-sm text-slate-500">Uploading to R2...</span>
-            ) : null}
-            {imageName ? (
-              <span className="text-sm text-emerald-700">
-                Uploaded: {imageName}
-              </span>
-            ) : null}
-          </label>
-        </div>
-      </section>
+      <form onSubmit={handleSubmit} className="space-y-8" aria-busy={isBusy}>
+        <FormErrorSummary message={error} />
 
-      <section className="rounded-lg border border-slate-300 bg-white p-5">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold">Line items</h2>
-          <button
-            type="button"
-            onClick={() =>
-              setLines((current) => [...current, emptyLine(products)])
-            }
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium"
-          >
-            Add item
-          </button>
-        </div>
-
-        {lines.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-600">
-            Create a product below before adding line items.
-          </p>
-        ) : null}
-
-        <div className="mt-4 space-y-4">
-          {lines.map((line, index) => {
-            const product = productMap.get(line.productId);
-            const quantity = Number(line.quantity);
-            const lineTotal = Number(line.lineTotal);
-            const preview =
-              quantity > 0 && lineTotal >= 0
-                ? normalizeReceiptItem(quantity, line.unit, lineTotal)
-                : null;
-            const allowedUnits = product
-              ? UNITS_BY_CATEGORY[product.unit_category]
-              : (["each"] as SpendlyUnit[]);
-
-            return (
-              <div
-                key={line.key}
-                className="rounded-lg border border-slate-200 p-4"
+        <section className="rounded-lg border border-slate-300 bg-white p-5">
+          <h2 className="text-lg font-semibold">Receipt details</h2>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="grid gap-2 text-sm">
+              <span className="font-medium">Store</span>
+              <select
+                value={storeId || ""}
+                onChange={(event) => handleStoreSelect(event.target.value)}
+                required
+                className="h-11 rounded-lg border border-slate-300 px-3"
               >
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-medium">Item {index + 1}</p>
-                  {lines.length > 1 ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setLines((current) =>
-                          current.filter((entry) => entry.key !== line.key),
-                        )
-                      }
-                      className="text-sm text-red-600"
-                    >
-                      Remove
-                    </button>
+                <option value="" disabled>
+                  Select a store
+                </option>
+                {stores.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.name}
+                  </option>
+                ))}
+                <option value={ADD_STORE_VALUE}>+ Add store</option>
+              </select>
+            </label>
+            <label className="grid gap-2 text-sm">
+              <span className="font-medium">Purchase date</span>
+              <input
+                type="date"
+                value={purchasedAt}
+                onChange={(event) => setPurchasedAt(event.target.value)}
+                required
+                className="h-11 rounded-lg border border-slate-300 px-3"
+              />
+            </label>
+            <div className="grid gap-2 text-sm">
+              <span className="font-medium">Subtotal</span>
+              <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums text-slate-700">
+                {formatMoney(computedSubtotal)}
+              </p>
+              <p className="text-xs text-slate-500">
+                Calculated from line item totals.
+              </p>
+            </div>
+            <label className="grid gap-2 text-sm">
+              <span className="font-medium">Tax</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={tax}
+                onChange={(event) => setTax(event.target.value)}
+                required
+                className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
+              />
+            </label>
+            <div className="grid gap-2 text-sm">
+              <span className="font-medium">Total</span>
+              <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums font-semibold text-slate-900">
+                {formatMoney(computedTotal)}
+              </p>
+              <p className="text-xs text-slate-500">Subtotal + tax.</p>
+            </div>
+            <label className="grid gap-2 text-sm md:col-span-2">
+              <span className="font-medium">Notes</span>
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                rows={3}
+                className="rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="grid gap-2 text-sm md:col-span-2">
+              <span className="font-medium">Receipt image (optional)</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={uploadingImage}
+                onChange={(event) =>
+                  void handleImageChange(event.target.files?.[0] ?? null)
+                }
+                className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-60"
+              />
+              {uploadingImage ? (
+                <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+                  <Spinner size="sm" />
+                  Uploading to R2...
+                </span>
+              ) : null}
+              {imageName ? (
+                <span className="text-sm text-emerald-700">
+                  Uploaded: {imageName}
+                </span>
+              ) : null}
+            </label>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-300 bg-white p-5">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-lg font-semibold">Line items</h2>
+            <button
+              type="button"
+              onClick={() =>
+                setLines((current) => [...current, emptyLine(products)])
+              }
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium transition hover:border-slate-400 hover:bg-slate-50"
+            >
+              Add item
+            </button>
+          </div>
+
+          {lines.length === 0 ? (
+            <div className="mt-4 rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center">
+              <p className="text-sm text-slate-600">
+                No line items yet. Add an item, then choose{" "}
+                <strong>+ Add product</strong> from the product dropdown if
+                needed.
+              </p>
+              <button
+                type="button"
+                onClick={() => setLines([emptyLine(products)])}
+                className="mt-3 inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium transition hover:bg-slate-50"
+              >
+                Add first item
+              </button>
+            </div>
+          ) : null}
+
+          <div className="mt-4 space-y-4">
+            {lines.map((line, index) => {
+              const product = productMap.get(line.productId);
+              const quantity = Number(line.quantity);
+              const lineTotal = Number(line.lineTotal);
+              const preview =
+                quantity > 0 && lineTotal >= 0
+                  ? normalizeReceiptItem(quantity, line.unit, lineTotal)
+                  : null;
+              const allowedUnits = product
+                ? UNITS_BY_CATEGORY[product.unit_category]
+                : (["each"] as SpendlyUnit[]);
+
+              return (
+                <div
+                  key={line.key}
+                  className="rounded-lg border border-slate-200 p-4"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-medium">Item {index + 1}</p>
+                    {lines.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLines((current) =>
+                            current.filter((entry) => entry.key !== line.key),
+                          )
+                        }
+                        className="text-sm text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium">Product</span>
+                      <select
+                        value={line.productId || ""}
+                        onChange={(event) =>
+                          handleProductSelect(line.key, event.target.value)
+                        }
+                        required
+                        className="h-11 rounded-lg border border-slate-300 px-3"
+                      >
+                        <option value="" disabled>
+                          Select product
+                        </option>
+                        {products.map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.name}
+                          </option>
+                        ))}
+                        <option value={ADD_PRODUCT_VALUE}>+ Add product</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium">Raw item name</span>
+                      <input
+                        value={line.rawName}
+                        onChange={(event) =>
+                          updateLine(line.key, { rawName: event.target.value })
+                        }
+                        required
+                        className="h-11 rounded-lg border border-slate-300 px-3"
+                      />
+                    </label>
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium">Quantity</span>
+                      <input
+                        type="number"
+                        min="0.001"
+                        step="0.001"
+                        value={line.quantity}
+                        onChange={(event) =>
+                          updateLine(line.key, { quantity: event.target.value })
+                        }
+                        required
+                        className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
+                      />
+                    </label>
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium">Unit</span>
+                      <select
+                        value={line.unit}
+                        onChange={(event) =>
+                          updateLine(line.key, {
+                            unit: event.target.value as SpendlyUnit,
+                          })
+                        }
+                        required
+                        className="h-11 rounded-lg border border-slate-300 px-3"
+                      >
+                        {allowedUnits.map((unit) => (
+                          <option key={unit} value={unit}>
+                            {unit}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium">Line total</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.lineTotal}
+                        onChange={(event) =>
+                          updateLine(line.key, { lineTotal: event.target.value })
+                        }
+                        required
+                        className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
+                      />
+                    </label>
+                    <div className="grid gap-2 text-sm">
+                      <span className="font-medium">Normalized preview</span>
+                      <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums text-slate-700">
+                        {preview
+                          ? formatUnitPrice(
+                              preview.normalizedUnitPrice,
+                              preview.normalizedUnit,
+                            )
+                          : "Enter quantity and total"}
+                      </p>
+                    </div>
+                  </div>
+                  {product &&
+                  unitCategoryForUnit(line.unit) !== product.unit_category ? (
+                    <p className="mt-3 text-sm text-red-600">
+                      Unit {line.unit} does not match product category{" "}
+                      {product.unit_category}.
+                    </p>
                   ) : null}
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium">Product</span>
-                    <select
-                      value={line.productId}
-                      onChange={(event) =>
-                        handleProductChange(line.key, event.target.value)
-                      }
-                      required
-                      className="h-11 rounded-lg border border-slate-300 px-3"
-                    >
-                      {products.map((entry) => (
-                        <option key={entry.id} value={entry.id}>
-                          {entry.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium">Raw item name</span>
-                    <input
-                      value={line.rawName}
-                      onChange={(event) =>
-                        updateLine(line.key, { rawName: event.target.value })
-                      }
-                      required
-                      className="h-11 rounded-lg border border-slate-300 px-3"
-                    />
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium">Quantity</span>
-                    <input
-                      type="number"
-                      min="0.001"
-                      step="0.001"
-                      value={line.quantity}
-                      onChange={(event) =>
-                        updateLine(line.key, { quantity: event.target.value })
-                      }
-                      required
-                      className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
-                    />
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium">Unit</span>
-                    <select
-                      value={line.unit}
-                      onChange={(event) =>
-                        updateLine(line.key, {
-                          unit: event.target.value as SpendlyUnit,
-                        })
-                      }
-                      required
-                      className="h-11 rounded-lg border border-slate-300 px-3"
-                    >
-                      {allowedUnits.map((unit) => (
-                        <option key={unit} value={unit}>
-                          {unit}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium">Line total</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={line.lineTotal}
-                      onChange={(event) =>
-                        updateLine(line.key, { lineTotal: event.target.value })
-                      }
-                      required
-                      className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
-                    />
-                  </label>
-                  <div className="grid gap-2 text-sm">
-                    <span className="font-medium">Normalized preview</span>
-                    <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums text-slate-700">
-                      {preview
-                        ? formatUnitPrice(
-                            preview.normalizedUnitPrice,
-                            preview.normalizedUnit,
-                          )
-                        : "Enter quantity and total"}
-                    </p>
-                  </div>
-                </div>
-                {product &&
-                unitCategoryForUnit(line.unit) !== product.unit_category ? (
-                  <p className="mt-3 text-sm text-red-600">
-                    Unit {line.unit} does not match product category{" "}
-                    {product.unit_category}.
-                  </p>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+              );
+            })}
+          </div>
+        </section>
 
-      <section className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-lg border border-slate-300 bg-white p-5">
-          <h2 className="text-lg font-semibold">Quick add store</h2>
-          <div className="mt-4 flex gap-3">
+        <button
+          type="submit"
+          disabled={isBusy || !storeId || lines.length === 0}
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isPending ? (
+            <>
+              <Spinner size="sm" className="border-white/30 border-t-white" />
+              Saving receipt...
+            </>
+          ) : (
+            "Save receipt"
+          )}
+        </button>
+      </form>
+
+      <Modal
+        open={storeModalOpen}
+        onClose={() => {
+          if (!isAddingStore) {
+            setStoreModalOpen(false);
+            setNewStoreName("");
+          }
+        }}
+        title="Add store"
+      >
+        <div className="space-y-4">
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium">Store name</span>
             <input
               value={newStoreName}
               onChange={(event) => setNewStoreName(event.target.value)}
-              placeholder="Store name"
-              className="h-11 flex-1 rounded-lg border border-slate-300 px-3"
+              placeholder="e.g. Fresh Market"
+              autoFocus
+              className="h-11 rounded-lg border border-slate-300 px-3"
             />
-            <button
-              type="button"
-              onClick={() => {
-                const formData = new FormData();
-                formData.set("name", newStoreName);
-                startTransition(async () => {
-                  const result = await createStore(formData);
-                  if (result.error) {
-                    setError(result.error);
-                    return;
-                  }
-                  setNewStoreName("");
-                  router.refresh();
-                });
-              }}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white"
-            >
-              Add store
-            </button>
-          </div>
+          </label>
+          <button
+            type="button"
+            disabled={isAddingStore || !newStoreName.trim()}
+            onClick={handleAddStore}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isAddingStore ? (
+              <>
+                <Spinner size="sm" className="border-white/30 border-t-white" />
+                Adding store...
+              </>
+            ) : (
+              "Add store"
+            )}
+          </button>
         </div>
+      </Modal>
 
-        <div className="rounded-lg border border-slate-300 bg-white p-5">
-          <h2 className="text-lg font-semibold">Quick add product</h2>
-          <div className="mt-4 grid gap-3">
+      <Modal
+        open={productModalOpen}
+        onClose={() => {
+          if (!isAddingProduct) {
+            setProductModalOpen(false);
+            setNewProductName("");
+            setProductModalLineKey(null);
+          }
+        }}
+        title="Add product"
+      >
+        <div className="space-y-4">
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium">Product name</span>
             <input
               value={newProductName}
               onChange={(event) => setNewProductName(event.target.value)}
-              placeholder="Product name"
+              placeholder="e.g. Milk"
+              autoFocus
               className="h-11 rounded-lg border border-slate-300 px-3"
             />
+          </label>
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium">Unit category</span>
             <select
               value={newProductCategory}
               onChange={(event) =>
@@ -482,37 +666,24 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
               <option value="volume">Volume (ml/l)</option>
               <option value="each">Each</option>
             </select>
-            <button
-              type="button"
-              onClick={() => {
-                const formData = new FormData();
-                formData.set("name", newProductName);
-                formData.set("unitCategory", newProductCategory);
-                startTransition(async () => {
-                  const result = await createProduct(formData);
-                  if (result.error) {
-                    setError(result.error);
-                    return;
-                  }
-                  setNewProductName("");
-                  router.refresh();
-                });
-              }}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white"
-            >
-              Add product
-            </button>
-          </div>
+          </label>
+          <button
+            type="button"
+            disabled={isAddingProduct || !newProductName.trim()}
+            onClick={handleAddProduct}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isAddingProduct ? (
+              <>
+                <Spinner size="sm" className="border-white/30 border-t-white" />
+                Adding product...
+              </>
+            ) : (
+              "Add product"
+            )}
+          </button>
         </div>
-      </section>
-
-      <button
-        type="submit"
-        disabled={isPending || uploadingImage || stores.length === 0}
-        className="inline-flex h-12 items-center justify-center rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isPending ? "Saving receipt..." : "Save receipt"}
-      </button>
-    </form>
+      </Modal>
+    </>
   );
 }

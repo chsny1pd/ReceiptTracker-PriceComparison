@@ -13,7 +13,7 @@ const actions = [
   },
   {
     title: "Compare prices",
-    description: "Compare latest normalized unit prices across two stores.",
+    description: "See which store is cheaper for a product from your receipts.",
     href: "/compare",
   },
   {

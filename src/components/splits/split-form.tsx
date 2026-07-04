@@ -7,6 +7,8 @@ import {
   createEvenSplit,
 } from "@/app/actions/splits";
 import { FormErrorSummary } from "@/components/form-error-summary";
+import { PendingNotice } from "@/components/ui/pending-notice";
+import { Spinner } from "@/components/ui/spinner";
 import { formatMoney } from "@/lib/format";
 import type { ProfileOption } from "@/lib/types";
 
@@ -188,7 +190,9 @@ export function SplitForm({
         database.
       </p>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+      <PendingNotice show={isPending} message="Creating split..." />
+
+      <form onSubmit={handleSubmit} className="mt-6 space-y-6" aria-busy={isPending}>
         <FormErrorSummary message={error} />
 
         <fieldset className="space-y-3">
@@ -376,9 +380,16 @@ export function SplitForm({
             (method === "even" && selectedParticipants.length === 0) ||
             (method === "custom" && payerShareAmount < 0)
           }
-          className="inline-flex h-12 items-center justify-center rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPending ? "Creating split..." : "Create split"}
+          {isPending ? (
+            <>
+              <Spinner size="sm" className="border-white/30 border-t-white" />
+              Creating split...
+            </>
+          ) : (
+            "Create split"
+          )}
         </button>
       </form>
     </section>

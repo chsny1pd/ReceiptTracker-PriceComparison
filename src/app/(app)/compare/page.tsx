@@ -29,8 +29,11 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
   ]);
 
   let rows: CompareRow[] = [];
+  const compared = Boolean(
+    params.productId && params.storeAId && params.storeBId,
+  );
 
-  if (params.productId && params.storeAId && params.storeBId) {
+  if (compared) {
     const { data, error } = await supabase.rpc("compare_product_between_stores", {
       p_product_id: params.productId,
       p_store_a_id: params.storeAId,
@@ -46,7 +49,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
     <>
       <PageHeader
         title="Compare prices"
-        description="Compare the latest normalized unit price for one product across two stores."
+        description="See which of two stores is cheaper for one product, using the latest price from your receipts."
       />
 
       <CompareForm
@@ -55,6 +58,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
         initialProductId={params.productId ?? ""}
         initialStoreAId={params.storeAId ?? ""}
         initialStoreBId={params.storeBId ?? ""}
+        compared={compared}
         rows={rows}
       />
     </>

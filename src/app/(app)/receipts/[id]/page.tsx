@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { deleteReceipt } from "@/app/actions/receipts";
 import { PageHeader } from "@/components/page-header";
+import { DeleteReceiptButton } from "@/components/receipts/delete-receipt-button";
 import { ReceiptImage } from "@/components/receipt-image";
 import { SplitForm } from "@/components/splits/split-form";
 import { getRequiredUser } from "@/lib/auth";
@@ -63,17 +63,7 @@ export default async function ReceiptDetailPage({
         description={`Purchased on ${formatDate(receipt.purchased_at)}`}
         backHref="/receipts"
         backLabel="Back to receipts"
-        action={
-          <form action={deleteReceipt}>
-            <input type="hidden" name="receiptId" value={receipt.id} />
-            <button
-              type="submit"
-              className="inline-flex h-11 items-center justify-center rounded-lg border border-red-300 px-5 text-sm font-medium text-red-700"
-            >
-              Delete receipt
-            </button>
-          </form>
-        }
+        action={<DeleteReceiptButton receiptId={receipt.id} />}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
