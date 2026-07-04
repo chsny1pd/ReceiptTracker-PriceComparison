@@ -43,7 +43,7 @@ function emptyLine(products: Product[]): DraftLine {
   return {
     key: crypto.randomUUID(),
     productId: firstProduct?.id ?? "",
-    rawName: firstProduct?.name ?? "",
+    rawName: "",
     quantity: "1",
     unit: firstProduct?.default_unit ?? "each",
     lineTotal: "0",
@@ -83,9 +83,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
   const [isAddingStore, startAddStoreTransition] = useTransition();
   const [isAddingProduct, startAddProductTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [storeId, setStoreId] = useState(
-    () => consumeCompareCartReceiptDraft()?.storeId ?? stores[0]?.id ?? "",
-  );
+  const [storeId, setStoreId] = useState(() => stores[0]?.id ?? "");
   const [purchasedAt, setPurchasedAt] = useState(
     new Date().toISOString().slice(0, 10),
   );
@@ -148,7 +146,6 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     const product = productMap.get(productId);
     updateLine(lineKey, {
       productId,
-      rawName: product?.name ?? "",
       unit: product?.default_unit ?? "each",
     });
   }
@@ -193,7 +190,6 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
         if (lineKey) {
           updateLine(lineKey, {
             productId: result.data.id,
-            rawName: result.data.name,
             unit: result.data.default_unit,
           });
         } else if (lines.length === 0) {
@@ -201,7 +197,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
             {
               key: crypto.randomUUID(),
               productId: result.data.id,
-              rawName: result.data.name,
+              rawName: "",
               quantity: "1",
               unit: result.data.default_unit,
               lineTotal: "0",
@@ -529,13 +525,14 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                       </select>
                     </label>
                     <label className="grid gap-2 text-sm">
-                      <span className="font-medium">Raw item name</span>
+                      <span className="font-medium">Brand</span>
                       <input
                         value={line.rawName}
                         onChange={(event) =>
                           updateLine(line.key, { rawName: event.target.value })
                         }
                         required
+                        placeholder="e.g. Brand A"
                         className="h-11 rounded-lg border border-slate-300 px-3"
                       />
                     </label>

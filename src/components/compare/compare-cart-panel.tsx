@@ -35,7 +35,7 @@ export function CompareCartPanel({
 
         <ul className="mt-4 space-y-3">
           {items.map((item) => {
-            const key = compareCartItemKey(item.productId, item.storeId);
+            const key = compareCartItemKey(item.productId, item.brandName);
 
             return (
               <li
@@ -47,7 +47,7 @@ export function CompareCartPanel({
                     <p className="font-medium text-slate-900">
                       {item.productName}
                     </p>
-                    <p className="mt-0.5 text-slate-600">{item.storeName}</p>
+                    <p className="mt-0.5 text-slate-600">{item.brandName}</p>
                     <p className="mt-1 tabular-nums text-slate-700">
                       {formatUnitPrice(item.normalizedUnitPrice, item.unit)}
                     </p>

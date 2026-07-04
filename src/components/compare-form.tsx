@@ -1,142 +1,56 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { CompareCartPanel } from "@/components/compare/compare-cart-panel";
-import { PendingNotice } from "@/components/ui/pending-notice";
-import { Spinner } from "@/components/ui/spinner";
 import {
+  buildBrandCompareRow,
+  buildCompareOutcomeFromRows,
   buildReceiptDraftFromCart,
   compareCartItemKey,
+  emptyBrandLine,
   loadCompareCart,
   saveCompareCart,
   saveCompareCartReceiptDraft,
+  type BrandCompareOutcome,
+  type BrandCompareRow,
   type CompareCartItem,
+  type DraftBrandLine,
 } from "@/lib/compare-cart";
-import { formatDate, formatMoney, formatUnitPrice } from "@/lib/format";
-import type { CompareRow, Product, SpendlyUnit, Store } from "@/lib/types";
+import { formatMoney, formatUnitPrice } from "@/lib/format";
+import type { Product, SpendlyUnit } from "@/lib/types";
+import { normalizeReceiptItem, UNITS_BY_CATEGORY } from "@/lib/units";
+
+const secondaryActionButtonClassName =
+  "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-emerald-300 px-3 text-sm font-medium text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50";
 
 type CompareFormProps = {
   products: Product[];
-  stores: Store[];
-  initialProductId?: string;
-  initialStoreAId?: string;
-  initialStoreBId?: string;
-  compared?: boolean;
-  rows: CompareRow[];
 };
-
-type CompareOutcome =
-  | { kind: "none" }
-  | { kind: "same_store" }
-  | { kind: "incomplete"; missingStoreNames: string[] }
-  | { kind: "unit_mismatch"; units: SpendlyUnit[] }
-  | { kind: "tie"; unit: SpendlyUnit; price: number }
-  | {
-      kind: "winner";
-      winnerStoreId: string;
-      winnerStoreName: string;
-      savings: number;
-      unit: SpendlyUnit;
-    };
-
-function hasPrice(row: CompareRow) {
-  return row.normalized_unit_price !== null && row.normalized_unit !== null;
-}
-
-function buildCompareOutcome(rows: CompareRow[]): CompareOutcome {
-  const priced = rows.filter(hasPrice);
-
-  if (priced.length === 0) {
-    return { kind: "none" };
-  }
-
-  if (priced.length < 2) {
-    const missingStoreNames = rows
-      .filter((row) => !hasPrice(row))
-      .map((row) => row.store_name);
-    return { kind: "incomplete", missingStoreNames };
-  }
-
-  const [first, second] = priced;
-  const firstUnit = first.normalized_unit!;
-  const secondUnit = second.normalized_unit!;
-
-  if (firstUnit !== secondUnit) {
-    return { kind: "unit_mismatch", units: [firstUnit, secondUnit] };
-  }
-
-  const firstPrice = first.normalized_unit_price!;
-  const secondPrice = second.normalized_unit_price!;
-
-  if (firstPrice === secondPrice) {
-    return { kind: "tie", unit: firstUnit, price: firstPrice };
-  }
-
-  const winner = firstPrice < secondPrice ? first : second;
-  return {
-    kind: "winner",
-    winnerStoreId: winner.store_id,
-    winnerStoreName: winner.store_name,
-    savings: Math.abs(firstPrice - secondPrice),
-    unit: firstUnit,
-  };
-}
 
 function CompareSummary({
   outcome,
   productName,
 }: {
-  outcome: CompareOutcome;
+  outcome: BrandCompareOutcome;
   productName: string | null;
 }) {
-  if (outcome.kind === "none") {
+  if (
+    outcome.kind === "none" ||
+    outcome.kind === "incomplete" ||
+    outcome.kind === "same_brand"
+  ) {
     return null;
-  }
-
-  if (outcome.kind === "same_store") {
-    return (
-      <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-900">
-        Choose two different stores to compare prices.
-      </div>
-    );
-  }
-
-  if (outcome.kind === "incomplete") {
-    const storeList = outcome.missingStoreNames.join(" and ");
-    return (
-      <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-900">
-        <p className="font-semibold">Not enough receipt data yet</p>
-        <p className="mt-1">
-          {productName ? (
-            <>
-              No receipts logged for <strong>{productName}</strong> at{" "}
-              <strong>{storeList}</strong> yet.
-            </>
-          ) : (
-            <>No receipts logged at {storeList} yet.</>
-          )}{" "}
-          Add a receipt to compare prices here.
-        </p>
-        <Link
-          href="/receipts/new"
-          className="mt-3 inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-        >
-          Log a receipt
-        </Link>
-      </div>
-    );
   }
 
   if (outcome.kind === "unit_mismatch") {
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-900">
-        <p className="font-semibold">Different units at each store</p>
+        <p className="font-semibold">Different units across brands</p>
         <p className="mt-1">
-          Latest receipts use {outcome.units.join(" and ")}. Log receipts with
-          the same unit type to compare fairly.
+          Use the same unit type on every brand row to compare fairly.
         </p>
       </div>
     );
@@ -145,11 +59,10 @@ function CompareSummary({
   if (outcome.kind === "tie") {
     return (
       <div className="rounded-lg border border-slate-300 bg-white px-4 py-4 text-sm text-slate-700">
-        <p className="font-semibold">Same price at both stores</p>
+        <p className="font-semibold">Same normalized price</p>
         <p className="mt-1">
-          Your latest receipts show{" "}
-          <strong>{formatUnitPrice(outcome.price, outcome.unit)}</strong> at
-          each store.
+          Every brand works out to{" "}
+          <strong>{formatUnitPrice(outcome.price, outcome.unit)}</strong>.
         </p>
       </div>
     );
@@ -157,13 +70,11 @@ function CompareSummary({
 
   return (
     <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
-      <p className="font-semibold">
-        {outcome.winnerStoreName} is cheaper
-      </p>
+      <p className="font-semibold">{outcome.winnerBrandName} is cheapest</p>
       <p className="mt-1">
-        Save{" "}
-        <strong>{formatUnitPrice(outcome.savings, outcome.unit)}</strong> based
-        on your latest receipts
+        Save up to{" "}
+        <strong>{formatUnitPrice(outcome.savings, outcome.unit)}</strong> per{" "}
+        {outcome.unit}
         {productName ? (
           <>
             {" "}
@@ -176,45 +87,80 @@ function CompareSummary({
   );
 }
 
-export function CompareForm({
-  products,
-  stores,
-  initialProductId = "",
-  initialStoreAId = "",
-  initialStoreBId = "",
-  compared = false,
-  rows,
-}: CompareFormProps) {
+export function CompareForm({ products }: CompareFormProps) {
   const router = useRouter();
-  const [productId, setProductId] = useState(initialProductId);
-  const [storeAId, setStoreAId] = useState(initialStoreAId);
-  const [storeBId, setStoreBId] = useState(initialStoreBId);
+  const [productId, setProductId] = useState("");
+  const [brandLines, setBrandLines] = useState<DraftBrandLine[]>(() => [
+    emptyBrandLine(),
+    emptyBrandLine(),
+  ]);
+  const [compared, setCompared] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [cartItems, setCartItems] = useState<CompareCartItem[]>(() =>
     loadCompareCart(),
   );
-  const [isPending, startTransition] = useTransition();
 
-  function addToCart(row: CompareRow) {
-    if (
-      !productId ||
-      !selectedProduct ||
-      row.normalized_unit_price === null ||
-      row.normalized_unit === null
-    ) {
+  const selectedProduct = products.find((product) => product.id === productId);
+  const allowedUnits = selectedProduct
+    ? UNITS_BY_CATEGORY[selectedProduct.unit_category]
+    : (["each"] as SpendlyUnit[]);
+
+  const compareRows = useMemo(() => {
+    if (!compared) {
+      return [] as BrandCompareRow[];
+    }
+
+    return brandLines
+      .map((line) => buildBrandCompareRow(line))
+      .filter((row): row is BrandCompareRow => row !== null);
+  }, [brandLines, compared]);
+
+  const outcome = useMemo(() => {
+    if (!compared) {
+      return { kind: "none" } as BrandCompareOutcome;
+    }
+
+    return buildCompareOutcomeFromRows(compareRows);
+  }, [compareRows, compared]);
+
+  const showCart = cartItems.length > 0;
+
+  function handleProductChange(nextProductId: string) {
+    setProductId(nextProductId);
+    const product = products.find((entry) => entry.id === nextProductId);
+    const defaultUnit = product?.default_unit ?? "each";
+
+    setBrandLines((current) =>
+      current.map((line) => ({ ...line, unit: defaultUnit })),
+    );
+  }
+
+  function updateBrandLine(key: string, patch: Partial<DraftBrandLine>) {
+    setBrandLines((current) =>
+      current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
+    );
+  }
+
+  function addBrandLine() {
+    const defaultUnit = selectedProduct?.default_unit ?? "each";
+    setBrandLines((current) => [...current, emptyBrandLine(defaultUnit)]);
+  }
+
+  function addToCart(row: BrandCompareRow) {
+    if (!productId || !selectedProduct) {
       return;
     }
 
-    const key = compareCartItemKey(productId, row.store_id);
+    const key = compareCartItemKey(productId, row.brandName);
 
     setCartItems((current) => {
       const existing = current.find(
-        (item) => compareCartItemKey(item.productId, item.storeId) === key,
+        (item) => compareCartItemKey(item.productId, item.brandName) === key,
       );
 
       const next = existing
         ? current.map((item) =>
-            compareCartItemKey(item.productId, item.storeId) === key
+            compareCartItemKey(item.productId, item.brandName) === key
               ? { ...item, quantity: item.quantity + 1 }
               : item,
           )
@@ -223,11 +169,10 @@ export function CompareForm({
             {
               productId,
               productName: selectedProduct.name,
-              storeId: row.store_id,
-              storeName: row.store_name,
+              brandName: row.brandName,
               quantity: 1,
-              unit: row.normalized_unit!,
-              normalizedUnitPrice: row.normalized_unit_price!,
+              unit: row.normalizedUnit,
+              normalizedUnitPrice: row.normalizedUnitPrice,
             },
           ];
 
@@ -239,7 +184,7 @@ export function CompareForm({
   function updateCartQuantity(key: string, quantity: number) {
     setCartItems((current) => {
       const next = current.map((item) =>
-        compareCartItemKey(item.productId, item.storeId) === key
+        compareCartItemKey(item.productId, item.brandName) === key
           ? { ...item, quantity }
           : item,
       );
@@ -251,7 +196,7 @@ export function CompareForm({
   function removeCartItem(key: string) {
     setCartItems((current) => {
       const next = current.filter(
-        (item) => compareCartItemKey(item.productId, item.storeId) !== key,
+        (item) => compareCartItemKey(item.productId, item.brandName) !== key,
       );
       saveCompareCart(next);
       return next;
@@ -270,226 +215,276 @@ export function CompareForm({
     router.push("/receipts/new?from=compare");
   }
 
-  const selectedProduct = products.find((product) => product.id === productId);
-  const outcome = useMemo(() => {
-    if (compared && storeAId && storeBId && storeAId === storeBId) {
-      return { kind: "same_store" } as CompareOutcome;
+  function handleCompare(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
+
+    if (!productId) {
+      setFormError("Select a product.");
+      return;
     }
 
-    if (!compared || rows.length === 0) {
-      return { kind: "none" } as CompareOutcome;
+    const trimmedNames = brandLines.map((line) => line.brandName.trim());
+    if (trimmedNames.some((name) => !name)) {
+      setFormError("Enter a brand name on every row.");
+      return;
     }
 
-    return buildCompareOutcome(rows);
-  }, [compared, rows, storeAId, storeBId]);
+    if (brandLines.length < 2) {
+      setFormError("Add at least two brands to compare.");
+      return;
+    }
 
-  const showResults = compared && rows.length > 0;
-  const showCart = cartItems.length > 0;
+    const normalizedNames = trimmedNames.map((name) => name.toLowerCase());
+    if (new Set(normalizedNames).size !== normalizedNames.length) {
+      setFormError("Each brand name must be unique.");
+      return;
+    }
+
+    setBrandLines((current) =>
+      current.map((line) => ({
+        ...line,
+        brandName: line.brandName.trim(),
+      })),
+    );
+    setCompared(true);
+  }
 
   return (
     <div
       className={`space-y-6 ${showCart ? "lg:flex lg:items-start lg:gap-6 lg:space-y-0" : ""}`}
-      aria-busy={isPending}
     >
       <div className={`space-y-6 ${showCart ? "min-w-0 flex-1" : ""}`}>
-      <PendingNotice show={isPending} message="Comparing prices..." />
-      {!compared ? (
         <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-700">
           <p className="font-medium text-slate-900">How this works</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>Pick a product you buy at two stores.</li>
-            <li>Choose the two stores to compare.</li>
+            <li>Pick a product and enter shelf prices for each brand.</li>
+            <li>Add more brands if you are comparing more than two options.</li>
             <li>
-              We show the latest price per unit from your receipts — not live
-              store prices.
+              Compare normalized unit prices, then add the winner to your cart.
             </li>
           </ol>
         </div>
-      ) : null}
 
-      <form
-        className="grid gap-4 rounded-lg border border-slate-300 bg-white p-5 md:grid-cols-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setFormError(null);
-
-          if (storeAId === storeBId) {
-            setFormError("Choose two different stores.");
-            return;
-          }
-
-          startTransition(() => {
-            const params = new URLSearchParams();
-            if (productId) params.set("productId", productId);
-            if (storeAId) params.set("storeAId", storeAId);
-            if (storeBId) params.set("storeBId", storeBId);
-            window.location.href = `/compare?${params.toString()}`;
-          });
-        }}
-      >
-        <label className="grid gap-2 text-sm">
-          <span className="font-medium">Product</span>
-          <select
-            value={productId}
-            onChange={(event) => setProductId(event.target.value)}
-            required
-            className="h-11 rounded-lg border border-slate-300 px-3"
-          >
-            <option value="" disabled>
-              Select product
-            </option>
-            {products.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-2 text-sm">
-          <span className="font-medium">First store</span>
-          <select
-            value={storeAId}
-            onChange={(event) => setStoreAId(event.target.value)}
-            required
-            className="h-11 rounded-lg border border-slate-300 px-3"
-          >
-            <option value="" disabled>
-              Select store
-            </option>
-            {stores.map((store) => (
-              <option key={store.id} value={store.id}>
-                {store.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-2 text-sm">
-          <span className="font-medium">Second store</span>
-          <select
-            value={storeBId}
-            onChange={(event) => setStoreBId(event.target.value)}
-            required
-            className="h-11 rounded-lg border border-slate-300 px-3"
-          >
-            <option value="" disabled>
-              Select store
-            </option>
-            {stores.map((store) => (
-              <option key={store.id} value={store.id}>
-                {store.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {formError ? (
-          <p className="md:col-span-3 text-sm text-red-700">{formError}</p>
+        {products.length === 0 ? (
+          <div className="rounded-lg border border-slate-300 bg-white px-4 py-4 text-sm text-slate-700">
+            <p className="font-medium text-slate-900">Setup needed</p>
+            <p className="mt-1">
+              Add a receipt with line items to create products first.
+            </p>
+            <Link
+              href="/receipts/new"
+              className="mt-3 inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            >
+              Log a receipt
+            </Link>
+          </div>
         ) : null}
-        <button
-          type="submit"
-          disabled={isPending}
-          className="md:col-span-3 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isPending ? (
-            <>
-              <Spinner size="sm" className="border-white/30 border-t-white" />
-              Comparing...
-            </>
-          ) : (
-            "Compare prices"
-          )}
-        </button>
-      </form>
 
-      {products.length === 0 || stores.length < 2 ? (
-        <div className="rounded-lg border border-slate-300 bg-white px-4 py-4 text-sm text-slate-700">
-          <p className="font-medium text-slate-900">Setup needed</p>
-          <p className="mt-1">
-            {products.length === 0
-              ? "Add a receipt with line items to create products."
-              : "Add at least two stores before comparing prices."}
-          </p>
-          <Link
-            href="/receipts/new"
-            className="mt-3 inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Log a receipt
-          </Link>
-        </div>
-      ) : null}
+        <form onSubmit={handleCompare} className="space-y-8">
+          {formError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {formError}
+            </p>
+          ) : null}
 
-      {showResults ? (
-        <>
-          <CompareSummary
-            outcome={outcome}
-            productName={selectedProduct?.name ?? null}
-          />
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {rows.map((row) => {
-              const rowHasPrice = hasPrice(row);
-              const isWinner =
-                outcome.kind === "winner" &&
-                row.store_id === outcome.winnerStoreId;
-              const isTie = outcome.kind === "tie";
-
-              return (
-                <article
-                  key={row.store_id}
-                  className={`flex flex-col rounded-lg border p-5 ${
-                    isWinner
-                      ? "border-emerald-400 bg-emerald-50/60"
-                      : "border-slate-300 bg-white"
-                  }`}
+          <section className="rounded-lg border border-slate-300 bg-white p-5">
+            <h2 className="text-lg font-semibold">Compare details</h2>
+            <div className="mt-4">
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium">Product</span>
+                <select
+                  value={productId}
+                  onChange={(event) => handleProductChange(event.target.value)}
+                  required
+                  className="h-11 rounded-lg border border-slate-300 px-3"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h2 className="text-2xl font-semibold">{row.store_name}</h2>
-                    {isWinner ? (
-                      <span className="inline-flex rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
-                        Cheaper
-                      </span>
-                    ) : null}
-                    {isTie && rowHasPrice ? (
-                      <span className="inline-flex rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-700">
-                        Same price
-                      </span>
-                    ) : null}
-                    {!isWinner &&
-                    !isTie &&
-                    rowHasPrice &&
-                    outcome.kind === "winner" ? (
-                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Higher
-                      </span>
-                    ) : null}
-                  </div>
+                  <option value="" disabled>
+                    Select product
+                  </option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
 
-                  {rowHasPrice ? (
-                    <>
-                      <p
-                        className={`mt-4 text-3xl font-semibold tabular-nums ${
-                          isWinner ? "text-emerald-800" : "text-slate-900"
-                        }`}
-                      >
-                        {formatUnitPrice(
-                          row.normalized_unit_price!,
-                          row.normalized_unit!,
-                        )}
-                      </p>
-                      <p className="mt-2 text-sm text-slate-600">
-                        Latest receipt
-                        {row.purchased_at
-                          ? `: ${formatDate(row.purchased_at)}`
-                          : ""}
-                      </p>
-                      {row.receipt_id ? (
-                        <Link
-                          href={`/receipts/${row.receipt_id}`}
-                          className="mt-4 inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          <section className="rounded-lg border border-slate-300 bg-white p-5">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold">Brands</h2>
+              <button
+                type="button"
+                onClick={addBrandLine}
+                className={secondaryActionButtonClassName}
+              >
+                More brand
+              </button>
+            </div>
+
+            {compared ? (
+              <div className="mt-4">
+                <CompareSummary
+                  outcome={outcome}
+                  productName={selectedProduct?.name ?? null}
+                />
+              </div>
+            ) : null}
+
+            <div className="mt-4 space-y-4">
+              {brandLines.map((line, index) => {
+                const row = buildBrandCompareRow(line);
+                const preview =
+                  Number(line.quantity) > 0 && Number(line.lineTotal) >= 0
+                    ? normalizeReceiptItem(
+                        Number(line.quantity),
+                        line.unit,
+                        Number(line.lineTotal) || 0,
+                      )
+                    : null;
+                const isWinner =
+                  compared &&
+                  outcome.kind === "winner" &&
+                  row?.brandName === outcome.winnerBrandName;
+                const isTie = compared && outcome.kind === "tie" && row !== null;
+                const isHigher =
+                  compared &&
+                  outcome.kind === "winner" &&
+                  row !== null &&
+                  row.brandName !== outcome.winnerBrandName;
+
+                return (
+                  <div
+                    key={line.key}
+                    className={`rounded-lg border p-4 ${
+                      isWinner
+                        ? "border-emerald-400 bg-emerald-50/60"
+                        : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">Brand {index + 1}</p>
+                        {isWinner ? (
+                          <span className="inline-flex rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
+                            Cheapest
+                          </span>
+                        ) : null}
+                        {isTie ? (
+                          <span className="inline-flex rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-700">
+                            Same price
+                          </span>
+                        ) : null}
+                        {isHigher ? (
+                          <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            Higher
+                          </span>
+                        ) : null}
+                      </div>
+                      {brandLines.length > 2 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setBrandLines((current) =>
+                              current.filter((entry) => entry.key !== line.key),
+                            )
+                          }
+                          className="text-sm text-red-600 hover:text-red-700"
                         >
-                          View source receipt
-                        </Link>
+                          Remove
+                        </button>
                       ) : null}
-                      <div className="mt-auto flex justify-end pt-4">
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium">Brand</span>
+                        <input
+                          value={line.brandName}
+                          onChange={(event) =>
+                            updateBrandLine(line.key, {
+                              brandName: event.target.value,
+                            })
+                          }
+                          placeholder="e.g. Brand A"
+                          required
+                          className="h-11 rounded-lg border border-slate-300 px-3"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium">Quantity</span>
+                        <input
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                          value={line.quantity}
+                          onChange={(event) =>
+                            updateBrandLine(line.key, {
+                              quantity: event.target.value,
+                            })
+                          }
+                          required
+                          className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium">Unit</span>
+                        <select
+                          value={line.unit}
+                          onChange={(event) =>
+                            updateBrandLine(line.key, {
+                              unit: event.target.value as SpendlyUnit,
+                            })
+                          }
+                          required
+                          className="h-11 rounded-lg border border-slate-300 px-3"
+                        >
+                          {allowedUnits.map((unit) => (
+                            <option key={unit} value={unit}>
+                              {unit}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium">Line total</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.lineTotal}
+                          onChange={(event) =>
+                            updateBrandLine(line.key, {
+                              lineTotal: event.target.value,
+                            })
+                          }
+                          placeholder="Shelf price"
+                          required
+                          className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
+                        />
+                        <p className="text-xs text-slate-500">Includes 7% VAT.</p>
+                      </label>
+                      <div className="grid gap-2 text-sm md:col-span-2">
+                        <span className="font-medium">Normalized preview</span>
+                        <p
+                          className={`flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums ${
+                            isWinner ? "text-emerald-800" : "text-slate-700"
+                          }`}
+                        >
+                          {preview
+                            ? formatUnitPrice(
+                                preview.normalizedUnitPrice,
+                                preview.normalizedUnit,
+                              )
+                            : "Enter quantity and line total"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {compared && row ? (
+                      <div className="mt-4 flex justify-end">
                         <button
                           type="button"
                           onClick={() => addToCart(row)}
@@ -498,42 +493,36 @@ export function CompareForm({
                           Add to Cart
                         </button>
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-4 text-sm text-slate-600">
-                        No receipts for this product here yet.
-                      </p>
-                      <Link
-                        href="/receipts/new"
-                        className="mt-4 inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-                      >
-                        Log a receipt
-                      </Link>
-                    </>
-                  )}
-                </article>
-              );
-            })}
-          </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
 
-          {outcome.kind === "winner" ? (
-            <p className="text-sm text-slate-600">
-              Difference: {formatMoney(outcome.savings)} per {outcome.unit}{" "}
-              between the two latest receipts.
-            </p>
-          ) : null}
-
-          {productId ? (
-            <Link
-              href={`/products/${productId}/history`}
-              className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            <button
+              type="submit"
+              className="mt-6 inline-flex h-12 items-center justify-center rounded-lg bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
-              View full price history for {selectedProduct?.name ?? "this product"}
-            </Link>
-          ) : null}
-        </>
-      ) : null}
+              Compare prices
+            </button>
+          </section>
+        </form>
+
+        {compared && outcome.kind === "winner" ? (
+          <p className="text-sm text-slate-600">
+            Largest gap: {formatMoney(outcome.savings)} per {outcome.unit}{" "}
+            between the cheapest and most expensive brand.
+          </p>
+        ) : null}
+
+        {compared && productId ? (
+          <Link
+            href={`/products/${productId}/history`}
+            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            View full price history for {selectedProduct?.name ?? "this product"}
+          </Link>
+        ) : null}
       </div>
 
       {showCart ? (
