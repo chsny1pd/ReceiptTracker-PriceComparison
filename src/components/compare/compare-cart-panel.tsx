@@ -1,5 +1,6 @@
 "use client";
 
+import { useAppPreferences } from "@/components/app-preferences-provider";
 import { formatMoney, formatUnitPrice } from "@/lib/format";
 import {
   compareCartItemKey,
@@ -20,6 +21,7 @@ export function CompareCartPanel({
   onRemove,
   onCreateReceipt,
 }: CompareCartPanelProps) {
+  const { dict } = useAppPreferences();
   const subtotal = items.reduce(
     (sum, item) => sum + lineTotalForCartItem(item),
     0,
@@ -28,9 +30,9 @@ export function CompareCartPanel({
   return (
     <aside className="w-full">
       <div className="rounded-lg border border-slate-300 bg-white p-5">
-        <h2 className="text-lg font-semibold">Cart</h2>
+        <h2 className="text-lg font-semibold">{dict.compare.cart}</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Items from your compare results.
+          {dict.compare.cartBody}
         </p>
 
         <ul className="mt-4 space-y-3">
@@ -55,9 +57,9 @@ export function CompareCartPanel({
                   <button
                     type="button"
                     onClick={() => onRemove(key)}
-                    className="text-xs text-red-600 hover:text-red-700"
-                  >
-                    Remove
+                  className="text-xs text-red-600 hover:text-red-700"
+                >
+                    {dict.common.remove}
                   </button>
                 </div>
 
@@ -69,7 +71,7 @@ export function CompareCartPanel({
                         onUpdateQuantity(key, Math.max(1, item.quantity - 1))
                       }
                       className="inline-flex h-8 w-8 items-center justify-center text-slate-700 transition hover:bg-slate-50"
-                      aria-label="Decrease quantity"
+                      aria-label={dict.compare.decreaseQuantity}
                     >
                       −
                     </button>
@@ -80,7 +82,7 @@ export function CompareCartPanel({
                       type="button"
                       onClick={() => onUpdateQuantity(key, item.quantity + 1)}
                       className="inline-flex h-8 w-8 items-center justify-center text-slate-700 transition hover:bg-slate-50"
-                      aria-label="Increase quantity"
+                      aria-label={dict.compare.increaseQuantity}
                     >
                       +
                     </button>
@@ -95,7 +97,7 @@ export function CompareCartPanel({
         </ul>
 
         <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4 text-sm">
-          <span className="font-medium text-slate-700">Subtotal</span>
+          <span className="font-medium text-slate-700">{dict.common.subtotal}</span>
           <span className="tabular-nums font-semibold text-slate-900">
             {formatMoney(subtotal)}
           </span>
@@ -106,7 +108,7 @@ export function CompareCartPanel({
           onClick={onCreateReceipt}
           className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
         >
-          Create Receipt
+          {dict.compare.createReceipt}
         </button>
       </div>
     </aside>

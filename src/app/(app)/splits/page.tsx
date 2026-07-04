@@ -131,31 +131,31 @@ export default async function SplitsPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-lg border border-slate-300 bg-white p-5">
-          <p className="text-sm text-slate-500">Open balances</p>
+          <p className="text-sm text-slate-500">{dict.splits.openBalances}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">
             {(balances ?? []).length}
           </p>
         </article>
         <article className="rounded-lg border border-slate-300 bg-white p-5">
-          <p className="text-sm text-slate-500">Shares awaiting payment</p>
+          <p className="text-sm text-slate-500">{dict.splits.sharesAwaitingPayment}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">
             {unsettledShares.filter((share) => share.share_status === "unpaid").length}
           </p>
         </article>
         <article className="rounded-lg border border-slate-300 bg-white p-5">
-          <p className="text-sm text-slate-500">Proofs awaiting review</p>
+          <p className="text-sm text-slate-500">{dict.splits.proofsAwaitingReview}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">
             {unsettledShares.filter((share) => share.share_status === "submitted").length}
           </p>
         </article>
         <article className="rounded-lg border border-slate-300 bg-white p-5">
-          <p className="text-sm text-slate-500">Recent splits</p>
+          <p className="text-sm text-slate-500">{dict.splits.recentSplits}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">{openSplits.length}</p>
         </article>
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">Netted balances</h2>
+        <h2 className="mb-4 text-lg font-semibold">{dict.splits.nettedBalances}</h2>
         <BalancesOverview
           balances={(balances ?? []) as BalanceRow[]}
           currentUserId={user.id}
@@ -164,15 +164,15 @@ export default async function SplitsPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">Action queue</h2>
+        <h2 className="mb-4 text-lg font-semibold">{dict.splits.actionQueue}</h2>
         <UnsettledSharesPanel shares={unsettledShares} currentUserId={user.id} />
       </section>
 
       <section className="mt-8 rounded-lg border border-slate-300 bg-white p-5">
-        <h2 className="text-lg font-semibold">Recent split records</h2>
+        <h2 className="text-lg font-semibold">{dict.splits.recentSplitRecords}</h2>
         {openSplits.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">
-            No split records yet. Create one from a receipt when a purchase needs sharing.
+            {dict.splits.noSplitRecords}
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-slate-200">
@@ -193,11 +193,11 @@ export default async function SplitsPage() {
                         payer?.github_username ?? null,
                         split.payer_user_id,
                       )}{" "}
-                      · {split.receipt_item_id ? "Line item" : "Whole receipt"}
+                      · {split.receipt_item_id ? dict.splits.lineItem : dict.splits.wholeReceipt}
                     </p>
                   </div>
                   <a href={`/splits/${split.id}`} className="text-sm font-medium text-emerald-700">
-                    Open split
+                    {dict.splits.openSplit}
                   </a>
                 </li>
               );

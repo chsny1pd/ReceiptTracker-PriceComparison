@@ -6,6 +6,7 @@ import {
   reviewPaymentProof,
   submitPaymentProof,
 } from "@/app/actions/payment-proofs";
+import { useAppPreferences } from "@/components/app-preferences-provider";
 import { FormErrorSummary } from "@/components/form-error-summary";
 import { compressImageIfNeeded } from "@/lib/client-image";
 import { formatDate } from "@/lib/format";
@@ -19,16 +20,24 @@ type PaymentProofPanelProps = {
   proofs: SharePaymentProof[];
 };
 
-function statusLabel(status: SplitShareDetail["share_status"]) {
+function statusLabel(
+  status: SplitShareDetail["share_status"],
+  labels: {
+    submitted: string;
+    confirmed: string;
+    rejected: string;
+    unpaid: string;
+  },
+) {
   switch (status) {
     case "submitted":
-      return "Payment submitted";
+      return labels.submitted;
     case "confirmed":
-      return "Confirmed";
+      return labels.confirmed;
     case "rejected":
-      return "Rejected";
+      return labels.rejected;
     default:
-      return "Unpaid";
+      return labels.unpaid;
   }
 }
 
@@ -39,6 +48,7 @@ export function PaymentProofPanel({
   receiverPaymentMethod,
   proofs,
 }: PaymentProofPanelProps) {
+  const { dict } = useAppPreferences();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -147,19 +157,28 @@ export function PaymentProofPanel({
     <section className="rounded-lg border border-slate-300 bg-white p-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Payment workflow</h3>
+          <h3 className="text-lg font-semibold">{dict.splits.paymentWorkflow}</h3>
           <p className="mt-1 text-sm text-slate-600">
-            Status: <span className="font-medium">{statusLabel(share.share_status)}</span>
+            {dict.splits.status}:{" "}
+            <span className="font-medium">
+              {statusLabel(share.share_status, {
+                submitted: dict.splits.submitted,
+                confirmed: dict.splits.confirmed,
+                rejected: dict.splits.rejected,
+                unpaid: dict.splits.unpaid,
+              })}
+            </span>
           </p>
         </div>
         <p className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-          Share owner: {share.participant_display_name ?? share.participant_github_username ?? share.participant_user_id}
+          {dict.splits.shareOwner}{" "}
+          {share.participant_display_name ?? share.participant_github_username ?? share.participant_user_id}
         </p>
       </div>
 
       {receiverPaymentMethod ? (
         <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm">
-          <p className="font-medium text-emerald-900">Pay to</p>
+          <p className="font-medium text-emerald-900">{dict.splits.payTo}</p>
           <p className="mt-1 text-emerald-900">{receiverPaymentMethod.label}</p>
           <p className="text-emerald-800">
             {[receiverPaymentMethod.provider_name, receiverPaymentMethod.account_reference]
@@ -168,7 +187,7 @@ export function PaymentProofPanel({
           </p>
           {receiverPaymentMethod.promptpay_id ? (
             <p className="text-emerald-800">
-              PromptPay: {receiverPaymentMethod.promptpay_id}
+              {dict.settings.promptPayLabel} {receiverPaymentMethod.promptpay_id}
             </p>
           ) : null}
           {receiverPaymentMethod.note ? (
@@ -181,7 +200,7 @@ export function PaymentProofPanel({
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <FormErrorSummary message={error} />
           <label className="grid gap-2 text-sm">
-            <span className="font-medium">Upload payment slip</span>
+            <span className="font-medium">{dict.splits.uploadPaymentSlip}</span>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
@@ -196,20 +215,20 @@ export function PaymentProofPanel({
             />
             <span className="text-xs text-slate-500">
               {uploading
-                ? "Uploading slip..."
+                ? dict.splits.uploadingSlip
                 : imageName
-                  ? `Uploaded: ${imageName}`
-                  : "Receipt-sized images are compressed before upload when needed."}
+                  ? `${dict.common.uploaded}: ${imageName}`
+                  : dict.splits.compressionHelp}
             </span>
           </label>
           <label className="grid gap-2 text-sm">
-            <span className="font-medium">Note</span>
+            <span className="font-medium">{dict.common.note}</span>
             <textarea
               rows={3}
               value={note}
               onChange={(event) => setNote(event.target.value)}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              placeholder="Optional transfer reference or note"
+              placeholder={dict.splits.notePlaceholder}
             />
           </label>
           <button
@@ -217,17 +236,22 @@ export function PaymentProofPanel({
             disabled={isPending || uploading || !imageObjectKey}
             className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isPending ? "Submitting..." : "Submit payment proof"}
+            {isPending ? dict.splits.submitting : dict.splits.submitPaymentProof}
           </button>
         </form>
       ) : null}
 
       {latestProof ? (
         <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
-          <p className="font-medium">Latest proof</p>
+          <p className="font-medium">{dict.splits.latestProof}</p>
           <p className="mt-1 text-sm text-slate-600">
-            Submitted {formatDate(latestProof.created_at.slice(0, 10))} · Status{" "}
-            {latestProof.review_status}
+            {dict.splits.submittedOn} {formatDate(latestProof.created_at.slice(0, 10))} ·{" "}
+            {dict.splits.statusLabel}{" "}
+            {latestProof.review_status === "submitted"
+              ? dict.splits.submitted
+              : latestProof.review_status === "confirmed"
+                ? dict.splits.confirmed
+                : dict.splits.rejected}
           </p>
           {latestProof.note ? (
             <p className="mt-2 text-sm text-slate-600">{latestProof.note}</p>
@@ -238,7 +262,7 @@ export function PaymentProofPanel({
             rel="noreferrer"
             className="mt-3 inline-flex text-sm font-medium text-emerald-700"
           >
-            Open uploaded proof
+            {dict.splits.openUploadedProof}
           </a>
 
           {canReview ? (
@@ -250,7 +274,7 @@ export function PaymentProofPanel({
                   disabled={isPending}
                   className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Confirm payment
+                  {dict.splits.confirmPayment}
                 </button>
                 <button
                   type="button"
@@ -258,7 +282,7 @@ export function PaymentProofPanel({
                   disabled={isPending}
                   className="inline-flex h-10 items-center justify-center rounded-lg border border-red-300 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Reject proof
+                  {dict.splits.rejectProof}
                 </button>
               </div>
             </div>

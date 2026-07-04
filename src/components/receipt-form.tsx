@@ -31,6 +31,7 @@ import {
   UNITS_BY_CATEGORY,
   unitCategoryForUnit,
 } from "@/lib/units";
+import { useAppPreferences } from "@/components/app-preferences-provider";
 
 const secondaryActionButtonClassName =
   "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-emerald-300 px-3 text-sm font-medium text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50";
@@ -115,6 +116,7 @@ export function ReceiptForm({
   initialDraft,
   initialDraftId,
 }: ReceiptFormProps) {
+  const { dict } = useAppPreferences();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isAddingStore, startAddStoreTransition] = useTransition();
@@ -128,12 +130,14 @@ export function ReceiptForm({
     (compareDraft
       ? {
           ...blankReceiptDraftPayload(),
+          title: compareDraft.title,
           lines: draftLineToState(compareDraft),
         }
       : null) ??
     localDraft;
 
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [title, setTitle] = useState(effectiveInitialDraft?.title ?? "");
   const [storeId, setStoreId] = useState(
     () => effectiveInitialDraft?.storeId || stores[0]?.id || "",
   );
@@ -187,7 +191,8 @@ export function ReceiptForm({
     isPending || isAddingStore || uploadingImage || uploadingLineKey !== null;
 
   const draftPayload = useMemo<ReceiptDraftPayload>(
-    () => ({
+    () => ({ 
+      title,
       storeId,
       purchasedAt,
       notes,
@@ -204,13 +209,14 @@ export function ReceiptForm({
         imageName: line.imageName,
       })),
     }),
-    [storeId, purchasedAt, notes, imageObjectKey, imageName, lines],
+    [title, storeId, purchasedAt, notes, imageObjectKey, imageName, lines],
   );
 
   const hasMeaningfulDraftContent = useMemo(
     () =>
       Boolean(
-        notes.trim() ||
+        title.trim() ||
+          notes.trim() ||
           imageObjectKey ||
           lines.some(
             (line) =>
@@ -220,7 +226,7 @@ export function ReceiptForm({
               line.quantity !== "1",
           ),
       ),
-    [notes, imageObjectKey, lines],
+    [title, notes, imageObjectKey, lines],
   );
 
   useEffect(() => {
@@ -440,7 +446,7 @@ export function ReceiptForm({
     setError(null);
 
     if (!storeId) {
-      setError("Select or add a store.");
+      setError(dict.receipts.selectOrAddStore);
       return;
     }
 
@@ -456,7 +462,7 @@ export function ReceiptForm({
       }));
 
     if (parsedItems.length === 0) {
-      setError("Add at least one line item with a product.");
+      setError(dict.receipts.addLineItemWithProduct);
       return;
     }
 
@@ -480,15 +486,15 @@ export function ReceiptForm({
     });
   }
 
-  let pendingMessage = "Saving receipt...";
+  let pendingMessage: string = dict.receipts.savingReceipt;
   if (isSavingDraft) {
-    pendingMessage = "Saving draft...";
+    pendingMessage = dict.receipts.savingDraft;
   } else if (uploadingImage) {
-    pendingMessage = "Uploading receipt image...";
+    pendingMessage = dict.receipts.uploadingReceiptImage;
   } else if (uploadingLineKey) {
-    pendingMessage = "Uploading item image...";
+    pendingMessage = dict.receipts.uploadingItemImage;
   } else if (isAddingStore) {
-    pendingMessage = "Adding store...";
+    pendingMessage = dict.receipts.addingStore;
   }
 
   return (
@@ -505,29 +511,41 @@ export function ReceiptForm({
         <section className="rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold">Receipt details</h2>
+              <h2 className="text-lg font-semibold">{dict.receipts.details}</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Drafts autosave locally and to your account while you work.
+                {dict.receipts.autosaveBody}
               </p>
             </div>
             <span className="text-sm text-slate-500">
               {isSavingDraft
-                ? "Saving draft..."
+                ? dict.receipts.savingDraft
                 : draftId
-                  ? "Draft saved"
-                  : "Autosave starts after real input"}
+                  ? dict.receipts.draftSaved
+                  : dict.receipts.autosaveStarts}
             </span>
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="grid gap-2 text-sm md:col-span-2">
+              <span className="font-medium">{dict.receipts.itemName}</span>
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder={dict.receipts.itemNamePlaceholder}
+                className="h-11 rounded-lg border border-slate-300 px-3"
+              />
+              <p className="text-xs text-slate-500">
+                {dict.receipts.itemNameHelp}
+              </p>
+            </label>
             <label className="grid gap-2 text-sm">
               <span className="flex items-center justify-between gap-3">
-                <span className="font-medium">Store</span>
+                <span className="font-medium">{dict.receipts.store}</span>
                 <button
                   type="button"
                   onClick={() => setStoreModalOpen(true)}
                   className={secondaryActionButtonClassName}
                 >
-                  Add store
+                  {dict.receipts.addStore}
                 </button>
               </span>
               <select
@@ -537,7 +555,7 @@ export function ReceiptForm({
                 className="h-11 rounded-lg border border-slate-300 px-3"
               >
                 <option value="" disabled>
-                  Select a store
+                  {dict.receipts.selectStore}
                 </option>
                 {stores.map((store) => (
                   <option key={store.id} value={store.id}>
@@ -547,7 +565,7 @@ export function ReceiptForm({
               </select>
             </label>
             <label className="grid gap-2 text-sm">
-              <span className="font-medium">Purchase date</span>
+              <span className="font-medium">{dict.receipts.purchaseDate}</span>
               <input
                 type="date"
                 value={purchasedAt}
@@ -557,33 +575,32 @@ export function ReceiptForm({
               />
             </label>
             <div className="grid gap-2 text-sm">
-              <span className="font-medium">Subtotal</span>
+              <span className="font-medium">{dict.common.subtotal}</span>
               <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums text-slate-700">
                 {formatMoney(computedSubtotal)}
               </p>
               <p className="text-xs text-slate-500">
-                Pre-tax amount extracted from line totals (VAT inclusive).
+                {dict.receipts.subtotalHelp}
               </p>
             </div>
             <div className="grid gap-2 text-sm">
-              <span className="font-medium">Tax (7%)</span>
+              <span className="font-medium">{dict.receipts.tax}</span>
               <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums text-slate-700">
                 {formatMoney(computedTax)}
               </p>
-              <p className="text-xs text-slate-500">VAT portion of line totals.</p>
+              <p className="text-xs text-slate-500">{dict.receipts.taxHelp}</p>
             </div>
             <div className="grid gap-2 text-sm">
-              <span className="font-medium">Total</span>
+              <span className="font-medium">{dict.common.total}</span>
               <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums font-semibold text-slate-900">
                 {formatMoney(computedTotal)}
               </p>
               <p className="text-xs text-slate-500">
-                Final receipt data starts affecting saved insights only after you
-                save.
+                {dict.receipts.totalHelp}
               </p>
             </div>
             <label className="grid gap-2 text-sm md:col-span-2">
-              <span className="font-medium">Notes</span>
+              <span className="font-medium">{dict.receipts.notes}</span>
               <textarea
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
@@ -592,7 +609,7 @@ export function ReceiptForm({
               />
             </label>
             <label className="grid gap-2 text-sm md:col-span-2">
-              <span className="font-medium">Receipt image (optional)</span>
+              <span className="font-medium">{dict.receipts.receiptImage}</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -605,12 +622,12 @@ export function ReceiptForm({
               {uploadingImage ? (
                 <span className="inline-flex items-center gap-2 text-sm text-slate-500">
                   <Spinner size="sm" />
-                  Compressing and uploading to R2...
+                  {dict.receipts.compressingUpload}
                 </span>
               ) : null}
               {imageName ? (
                 <span className="text-sm text-emerald-700">
-                  Uploaded: {imageName}
+                  {dict.common.uploaded}: {imageName}
                 </span>
               ) : null}
             </label>
@@ -619,7 +636,7 @@ export function ReceiptForm({
 
         <section className="rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold">Line items</h2>
+            <h2 className="text-lg font-semibold">{dict.receipts.lineItems}</h2>
             <button
               type="button"
               onClick={() =>
@@ -627,22 +644,21 @@ export function ReceiptForm({
               }
               className={secondaryActionButtonClassName}
             >
-              Add item
+              {dict.receipts.addItem}
             </button>
           </div>
 
           {lines.length === 0 ? (
             <div className="mt-4 rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center">
               <p className="text-sm text-slate-600">
-                No line items yet. Add an item, then use <strong>Add product</strong>{" "}
-                if you need a new product.
+                {dict.receipts.noLineItems}
               </p>
               <button
                 type="button"
                 onClick={() => setLines([emptyLine(products)])}
                 className="mt-3 inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium transition hover:bg-slate-50"
               >
-                Add first item
+                {dict.receipts.addFirstItem}
               </button>
             </div>
           ) : null}
@@ -666,7 +682,7 @@ export function ReceiptForm({
                   className="rounded-lg border border-slate-200 p-4"
                 >
                   <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-medium">Item {index + 1}</p>
+                    <p className="text-sm font-medium">{dict.receipts.item} {index + 1}</p>
                     {lines.length > 1 ? (
                       <button
                         type="button"
@@ -677,14 +693,14 @@ export function ReceiptForm({
                         }
                         className="text-sm text-red-600 hover:text-red-700"
                       >
-                        Remove
+                        {dict.common.remove}
                       </button>
                     ) : null}
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="grid gap-2 text-sm">
                       <span className="flex items-center justify-between gap-3">
-                        <span className="font-medium">Product</span>
+                        <span className="font-medium">{dict.compare.product}</span>
                         <button
                           type="button"
                           onClick={() => {
@@ -693,7 +709,7 @@ export function ReceiptForm({
                           }}
                           className={secondaryActionButtonClassName}
                         >
-                          Add product
+                          {dict.compare.addProduct}
                         </button>
                       </span>
                       <select
@@ -705,7 +721,7 @@ export function ReceiptForm({
                         className="h-11 rounded-lg border border-slate-300 px-3"
                       >
                         <option value="" disabled>
-                          Select product
+                          {dict.compare.selectProduct}
                         </option>
                         {products.map((entry) => (
                           <option key={entry.id} value={entry.id}>
@@ -715,7 +731,7 @@ export function ReceiptForm({
                       </select>
                     </label>
                     <label className="grid gap-2 text-sm">
-                      <span className="font-medium">Brand</span>
+                      <span className="font-medium">{dict.receipts.brand}</span>
                       <input
                         value={line.rawName}
                         onChange={(event) =>
@@ -727,7 +743,7 @@ export function ReceiptForm({
                       />
                     </label>
                     <label className="grid gap-2 text-sm">
-                      <span className="font-medium">Quantity</span>
+                      <span className="font-medium">{dict.common.quantity}</span>
                       <input
                         type="number"
                         min="0.001"
@@ -741,7 +757,7 @@ export function ReceiptForm({
                       />
                     </label>
                     <label className="grid gap-2 text-sm">
-                      <span className="font-medium">Unit</span>
+                      <span className="font-medium">{dict.common.unit}</span>
                       <select
                         value={line.unit}
                         onChange={(event) =>
@@ -760,7 +776,7 @@ export function ReceiptForm({
                       </select>
                     </label>
                     <label className="grid gap-2 text-sm">
-                      <span className="font-medium">Line total</span>
+                      <span className="font-medium">{dict.receipts.lineTotal}</span>
                       <input
                         type="number"
                         min="0"
@@ -772,21 +788,21 @@ export function ReceiptForm({
                         required
                         className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
                       />
-                      <p className="text-xs text-slate-500">Includes 7% VAT.</p>
+                      <p className="text-xs text-slate-500">{dict.compare.includesVat}</p>
                     </label>
                     <div className="grid gap-2 text-sm">
-                      <span className="font-medium">Normalized preview</span>
+                      <span className="font-medium">{dict.compare.normalizedPreview}</span>
                       <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums text-slate-700">
                         {preview
                           ? formatUnitPrice(
                               preview.normalizedUnitPrice,
                               preview.normalizedUnit,
                             )
-                          : "Enter quantity and total"}
+                          : dict.receipts.enterQuantityAndTotal}
                       </p>
                     </div>
                     <label className="grid gap-2 text-sm md:col-span-2">
-                      <span className="font-medium">Item image (optional)</span>
+                      <span className="font-medium">{dict.receipts.itemImage}</span>
                       <input
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
@@ -802,12 +818,12 @@ export function ReceiptForm({
                       {uploadingLineKey === line.key ? (
                         <span className="inline-flex items-center gap-2 text-sm text-slate-500">
                           <Spinner size="sm" />
-                          Compressing and uploading to R2...
+                          {dict.receipts.compressingUpload}
                         </span>
                       ) : null}
                       {line.imageName ? (
                         <span className="text-sm text-emerald-700">
-                          Uploaded: {line.imageName}
+                          {dict.common.uploaded}: {line.imageName}
                         </span>
                       ) : null}
                     </label>
@@ -815,8 +831,9 @@ export function ReceiptForm({
                   {product &&
                   unitCategoryForUnit(line.unit) !== product.unit_category ? (
                     <p className="mt-3 text-sm text-red-600">
-                      Unit {line.unit} does not match product category{" "}
-                      {product.unit_category}.
+                      {dict.receipts.unitMismatch
+                        .replace("{unit}", line.unit)
+                        .replace("{category}", product.unit_category)}
                     </p>
                   ) : null}
                 </div>
@@ -833,10 +850,10 @@ export function ReceiptForm({
           {isPending ? (
             <>
               <Spinner size="sm" className="border-white/30 border-t-white" />
-              Saving receipt...
+              {dict.receipts.savingReceipt}
             </>
           ) : (
-            "Save receipt"
+            dict.receipts.saveReceipt
           )}
         </button>
       </form>
@@ -849,11 +866,11 @@ export function ReceiptForm({
             setNewStoreName("");
           }
         }}
-        title="Add store"
+        title={dict.receipts.addStoreTitle}
       >
         <div className="space-y-4">
           <label className="grid gap-2 text-sm">
-            <span className="font-medium">Store name</span>
+            <span className="font-medium">{dict.receipts.storeName}</span>
             <input
               value={newStoreName}
               onChange={(event) => setNewStoreName(event.target.value)}
@@ -871,10 +888,10 @@ export function ReceiptForm({
             {isAddingStore ? (
               <>
                 <Spinner size="sm" className="border-white/30 border-t-white" />
-                Adding store...
+                {dict.receipts.addingStoreButton}
               </>
             ) : (
-              "Add store"
+              dict.receipts.addStore
             )}
           </button>
         </div>

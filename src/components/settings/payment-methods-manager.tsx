@@ -6,6 +6,7 @@ import {
   deletePaymentMethod,
   savePaymentMethod,
 } from "@/app/actions/payment-methods";
+import { useAppPreferences } from "@/components/app-preferences-provider";
 import { FormErrorSummary } from "@/components/form-error-summary";
 import { compressImageIfNeeded } from "@/lib/client-image";
 import type { UserPaymentMethod } from "@/lib/types";
@@ -20,6 +21,7 @@ const inputClassName =
 export function PaymentMethodsManager({
   methods,
 }: PaymentMethodsManagerProps) {
+  const { dict } = useAppPreferences();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [label, setLabel] = useState("");
@@ -125,17 +127,16 @@ export function PaymentMethodsManager({
   return (
     <div className="space-y-6">
       <section className="rounded-lg border border-slate-300 bg-white p-5">
-        <h2 className="text-lg font-semibold">Payment receiving methods</h2>
+        <h2 className="text-lg font-semibold">{dict.settings.managerTitle}</h2>
         <p className="mt-2 text-sm text-slate-600">
-          Add the account details people should use when they owe you. QR images stay
-          in R2; Postgres stores metadata only.
+          {dict.settings.managerBody}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <FormErrorSummary message={error} />
           <div className="grid gap-4 md:grid-cols-2">
             <label className="grid gap-2 text-sm">
-              <span className="font-medium">Label</span>
+              <span className="font-medium">{dict.settings.label}</span>
               <input
                 className={inputClassName}
                 value={label}
@@ -145,7 +146,7 @@ export function PaymentMethodsManager({
               />
             </label>
             <label className="grid gap-2 text-sm">
-              <span className="font-medium">Provider or bank</span>
+              <span className="font-medium">{dict.settings.provider}</span>
               <input
                 className={inputClassName}
                 value={providerName}
@@ -154,7 +155,7 @@ export function PaymentMethodsManager({
               />
             </label>
             <label className="grid gap-2 text-sm">
-              <span className="font-medium">Account name</span>
+              <span className="font-medium">{dict.settings.accountName}</span>
               <input
                 className={inputClassName}
                 value={accountName}
@@ -162,7 +163,7 @@ export function PaymentMethodsManager({
               />
             </label>
             <label className="grid gap-2 text-sm">
-              <span className="font-medium">Account number or reference</span>
+              <span className="font-medium">{dict.settings.accountReference}</span>
               <input
                 className={inputClassName}
                 value={accountReference}
@@ -170,7 +171,7 @@ export function PaymentMethodsManager({
               />
             </label>
             <label className="grid gap-2 text-sm">
-              <span className="font-medium">PromptPay ID</span>
+              <span className="font-medium">{dict.settings.promptpay}</span>
               <input
                 className={inputClassName}
                 value={promptpayId}
@@ -178,7 +179,7 @@ export function PaymentMethodsManager({
               />
             </label>
             <label className="grid gap-2 text-sm">
-              <span className="font-medium">QR image</span>
+              <span className="font-medium">{dict.settings.qr}</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -193,16 +194,16 @@ export function PaymentMethodsManager({
               />
               <span className="text-xs text-slate-500">
                 {uploadingQr
-                  ? "Uploading QR..."
+                  ? dict.settings.uploadingQr
                   : qrImageName
-                    ? `Uploaded: ${qrImageName}`
-                    : "Optional. Browser compression runs before upload when needed."}
+                    ? `${dict.common.uploaded}: ${qrImageName}`
+                    : dict.settings.qrOptionalHelp}
               </span>
             </label>
           </div>
 
           <label className="grid gap-2 text-sm">
-            <span className="font-medium">Instructions</span>
+            <span className="font-medium">{dict.settings.note}</span>
             <textarea
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
               value={note}
@@ -218,7 +219,7 @@ export function PaymentMethodsManager({
               checked={isDefault}
               onChange={(event) => setIsDefault(event.target.checked)}
             />
-            Make this my default receiving method
+            {dict.settings.makeDefaultLong}
           </label>
 
           <button
@@ -226,16 +227,16 @@ export function PaymentMethodsManager({
             disabled={isPending || uploadingQr}
             className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isPending ? "Saving..." : "Save payment method"}
+            {isPending ? dict.settings.saving : dict.settings.saveMethod}
           </button>
         </form>
       </section>
 
       <section className="rounded-lg border border-slate-300 bg-white p-5">
-        <h2 className="text-lg font-semibold">Saved methods</h2>
+        <h2 className="text-lg font-semibold">{dict.settings.savedMethods}</h2>
         {methods.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">
-            No payment methods yet. Add one so split participants can see how to pay you.
+            {dict.settings.noMethodsBody}
           </p>
         ) : (
           <ul className="mt-4 space-y-3">
@@ -250,18 +251,18 @@ export function PaymentMethodsManager({
                       {method.label}
                       {method.is_default ? (
                         <span className="ml-2 rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-800">
-                          Default
+                          {dict.common.default}
                         </span>
                       ) : null}
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
                       {[method.provider_name, method.account_name, method.account_reference]
                         .filter(Boolean)
-                        .join(" · ") || "No account details yet"}
+                        .join(" · ") || dict.settings.noAccountDetails}
                     </p>
                     {method.promptpay_id ? (
                       <p className="text-sm text-slate-600">
-                        PromptPay: {method.promptpay_id}
+                        {dict.settings.promptPayLabel} {method.promptpay_id}
                       </p>
                     ) : null}
                     {method.note ? (
@@ -274,7 +275,7 @@ export function PaymentMethodsManager({
                       type="submit"
                       className="text-sm font-medium text-red-600 hover:text-red-700"
                     >
-                      Delete
+                      {dict.common.delete}
                     </button>
                   </form>
                 </div>

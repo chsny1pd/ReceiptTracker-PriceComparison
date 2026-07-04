@@ -26,7 +26,6 @@ export async function GET(_request: Request, context: RouteContext) {
     .from("receipts")
     .select("image_object_key")
     .eq("id", receiptId)
-    .eq("owner_user_id", user.id)
     .single();
 
   if (error || !receipt?.image_object_key) {

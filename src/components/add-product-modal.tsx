@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 
 import { createProduct } from "@/app/actions/catalog";
+import { useAppPreferences } from "@/components/app-preferences-provider";
 import { Modal } from "@/components/ui/modal";
 import { Spinner } from "@/components/ui/spinner";
 import type { Product } from "@/lib/types";
@@ -20,6 +21,7 @@ export function AddProductModal({
   onSuccess,
   onError,
 }: AddProductModalProps) {
+  const { dict } = useAppPreferences();
   const [isAddingProduct, startAddProductTransition] = useTransition();
   const [newProductName, setNewProductName] = useState("");
   const [newProductCategory, setNewProductCategory] = useState<
@@ -63,10 +65,10 @@ export function AddProductModal({
   }
 
   return (
-    <Modal open={open} onClose={handleClose} title="Add product">
+    <Modal open={open} onClose={handleClose} title={dict.compare.addProduct}>
       <div className="space-y-4">
         <label className="grid gap-2 text-sm">
-          <span className="font-medium">Product name</span>
+          <span className="font-medium">{dict.compare.product}</span>
           <input
             value={newProductName}
             onChange={(event) => setNewProductName(event.target.value)}
@@ -76,7 +78,7 @@ export function AddProductModal({
           />
         </label>
         <label className="grid gap-2 text-sm">
-          <span className="font-medium">Unit category</span>
+          <span className="font-medium">{dict.common.unit}</span>
           <select
             value={newProductCategory}
             onChange={(event) =>
@@ -95,15 +97,15 @@ export function AddProductModal({
           type="button"
           disabled={isAddingProduct || !newProductName.trim()}
           onClick={handleAddProduct}
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isAddingProduct ? (
             <>
               <Spinner size="sm" className="border-white/30 border-t-white" />
-              Adding product...
+              {dict.compare.addProduct}...
             </>
           ) : (
-            "Add product"
+            dict.compare.addProduct
           )}
         </button>
       </div>

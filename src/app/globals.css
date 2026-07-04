@@ -20,9 +20,13 @@ body {
   background: var(--background);
   color: var(--foreground);
   overflow-x: hidden;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
-html.dark {
+html.dark,
+html[data-theme="dark"] {
   --background: #020617;
   --foreground: #e2e8f0;
   --surface: #0f172a;
@@ -31,96 +35,154 @@ html.dark {
   --muted: #94a3b8;
 }
 
-html.dark body {
+html.light,
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+html.dark body,
+html[data-theme="dark"] body {
   color-scheme: dark;
 }
 
-html.dark .bg-white {
+html.dark .bg-white,
+html[data-theme="dark"] .bg-white {
   background-color: var(--surface);
 }
 
 html.dark .bg-slate-100,
-html.dark .bg-slate-50 {
+html.dark .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100,
+html[data-theme="dark"] .bg-slate-50 {
   background-color: var(--muted-surface);
 }
 
 html.dark .border-slate-300,
 html.dark .border-slate-200,
 html.dark .border-slate-100,
-html.dark .border-slate-400 {
+html.dark .border-slate-400,
+html[data-theme="dark"] .border-slate-300,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-400 {
   border-color: var(--border);
 }
 
 html.dark .text-slate-950,
-html.dark .text-slate-900 {
+html.dark .text-slate-900,
+html[data-theme="dark"] .text-slate-950,
+html[data-theme="dark"] .text-slate-900 {
   color: var(--foreground);
 }
 
 html.dark .text-slate-700,
 html.dark .text-slate-600,
-html.dark .text-slate-500 {
+html.dark .text-slate-500,
+html[data-theme="dark"] .text-slate-700,
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-500 {
   color: var(--muted);
 }
 
 html.dark .hover\:bg-slate-50:hover,
-html.dark .hover\:bg-slate-100:hover {
+html.dark .hover\:bg-slate-100:hover,
+html[data-theme="dark"] .hover\:bg-slate-50:hover,
+html[data-theme="dark"] .hover\:bg-slate-100:hover {
   background-color: #1e293b;
 }
 
-html.dark .hover\:text-slate-950:hover {
+html.dark .hover\:text-slate-950:hover,
+html[data-theme="dark"] .hover\:text-slate-950:hover {
   color: var(--foreground);
 }
 
-html.dark .bg-slate-950 {
+html.dark .bg-slate-950,
+html[data-theme="dark"] .bg-slate-950 {
   background-color: #e2e8f0;
 }
 
-html.dark .text-white {
+html.dark .text-white,
+html[data-theme="dark"] .text-white {
   color: #0f172a;
 }
 
-html.dark .hover\:bg-slate-800:hover {
+html.dark .hover\:bg-slate-800:hover,
+html[data-theme="dark"] .hover\:bg-slate-800:hover {
   background-color: #cbd5e1;
 }
 
-html.dark .bg-emerald-700 {
+html.dark .bg-emerald-700,
+html[data-theme="dark"] .bg-emerald-700 {
   background-color: #059669;
 }
 
 html.dark .hover\:bg-emerald-600:hover,
-html.dark .hover\:bg-emerald-300:hover {
+html.dark .hover\:bg-emerald-300:hover,
+html[data-theme="dark"] .hover\:bg-emerald-600:hover,
+html[data-theme="dark"] .hover\:bg-emerald-300:hover {
   background-color: #10b981;
 }
 
 html.dark .bg-emerald-50,
-html.dark .bg-emerald-50\/60 {
+html.dark .bg-emerald-50\/60,
+html[data-theme="dark"] .bg-emerald-50,
+html[data-theme="dark"] .bg-emerald-50\/60 {
   background-color: rgba(6, 78, 59, 0.55);
 }
 
-html.dark .bg-amber-50 {
+html.dark .bg-amber-50,
+html[data-theme="dark"] .bg-amber-50 {
   background-color: rgba(120, 53, 15, 0.45);
 }
 
 html.dark .bg-red-50,
-html.dark .bg-red-950\/40 {
+html.dark .bg-red-950\/40,
+html[data-theme="dark"] .bg-red-50,
+html[data-theme="dark"] .bg-red-950\/40 {
   background-color: rgba(127, 29, 29, 0.45);
 }
 
 html.dark .text-red-700,
-html.dark .text-red-600 {
+html.dark .text-red-600,
+html[data-theme="dark"] .text-red-700,
+html[data-theme="dark"] .text-red-600 {
   color: #fca5a5;
 }
 
 html.dark .text-amber-900,
-html.dark .text-amber-700 {
+html.dark .text-amber-700,
+html[data-theme="dark"] .text-amber-900,
+html[data-theme="dark"] .text-amber-700 {
   color: #fcd34d;
 }
 
 html.dark .text-emerald-900,
 html.dark .text-emerald-800,
 html.dark .text-emerald-700,
-html.dark .text-emerald-600 {
+html.dark .text-emerald-600,
+html[data-theme="dark"] .text-emerald-900,
+html[data-theme="dark"] .text-emerald-800,
+html[data-theme="dark"] .text-emerald-700,
+html[data-theme="dark"] .text-emerald-600 {
   color: #6ee7b7;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea,
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background-color: var(--surface);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder,
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: var(--muted);
 }
 
 :focus-visible {

@@ -9,6 +9,7 @@ import {
 } from "@/components/splits/settle-share-button";
 import { getRequiredUser } from "@/lib/auth";
 import { formatDate, formatMoney } from "@/lib/format";
+import { getServerI18n } from "@/lib/server-preferences";
 import type {
   ProfileOption,
   SharePaymentProof,
@@ -32,6 +33,7 @@ function profileLabel(
 export default async function SplitDetailPage({ params }: SplitDetailPageProps) {
   const { id } = await params;
   const { supabase, user } = await getRequiredUser();
+  const { dict } = await getServerI18n();
 
   const { data: split, error } = await supabase
     .from("expense_splits")
@@ -143,26 +145,26 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
   return (
     <>
       <PageHeader
-        title="Split detail"
-        description={`Created ${formatDate(splitDetail.created_at.slice(0, 10))}`}
+        title={dict.splits.splitDetail}
+        description={`${dict.splits.created} ${formatDate(splitDetail.created_at.slice(0, 10))}`}
         backHref={`/receipts/${splitDetail.receipt_id}`}
-        backLabel="Back to receipt"
+        backLabel={dict.splits.backToReceipt}
         action={
           <Link
             href="/splits"
             className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-300 px-5 text-sm font-semibold"
           >
-            Open split hub
+            {dict.splits.openSplitHub}
           </Link>
         }
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-lg border border-slate-300 bg-white p-5">
-          <h2 className="text-lg font-semibold">Split summary</h2>
+          <h2 className="text-lg font-semibold">{dict.splits.splitSummary}</h2>
           <dl className="mt-4 space-y-3 text-sm">
             <div>
-              <dt className="text-slate-600">Payer</dt>
+              <dt className="text-slate-600">{dict.splits.payer}</dt>
               <dd className="font-medium">
                 {profileLabel(
                   splitDetail.payer_display_name,
@@ -173,29 +175,29 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
               </dd>
             </div>
             <div>
-              <dt className="text-slate-600">Method</dt>
+              <dt className="text-slate-600">{dict.splits.method}</dt>
               <dd className="font-medium capitalize">{splitDetail.split_method}</dd>
             </div>
             <div>
-              <dt className="text-slate-600">Target</dt>
+              <dt className="text-slate-600">{dict.splits.target}</dt>
               <dd className="font-medium">
-                {receiptItemLabel ?? "Whole receipt"}
+                {receiptItemLabel ?? dict.splits.wholeReceipt}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-600">Total amount</dt>
+              <dt className="text-slate-600">{dict.splits.totalAmount}</dt>
               <dd className="font-medium tabular-nums">
                 {formatMoney(splitDetail.total_amount)}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-600">Source receipt</dt>
+              <dt className="text-slate-600">{dict.compare.sourceReceipt}</dt>
               <dd>
                 <Link
                   href={`/receipts/${splitDetail.receipt_id}`}
                   className="font-medium text-emerald-700"
                 >
-                  Open receipt
+                  {dict.receipts.openReceipt}
                 </Link>
               </dd>
             </div>
@@ -203,27 +205,27 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
         </section>
 
         <section className="rounded-lg border border-slate-300 bg-white p-5">
-          <h2 className="text-lg font-semibold">Rules</h2>
+          <h2 className="text-lg font-semibold">{dict.splits.rules}</h2>
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
-            <li>The payer never gets an `expense_split_shares` row.</li>
-            <li>Only listed participants owe the payer.</li>
-            <li>Unpaid, submitted, and rejected shares still affect netted balances.</li>
-            <li>Only the receiver can confirm or reject payment proof.</li>
+            <li>{dict.splits.rules1}</li>
+            <li>{dict.splits.rules2}</li>
+            <li>{dict.splits.rules3}</li>
+            <li>{dict.splits.rules4}</li>
           </ul>
         </section>
       </div>
 
       <section className="mt-6 overflow-hidden rounded-lg border border-slate-300 bg-white">
         <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-semibold">Participant shares</h2>
+          <h2 className="text-lg font-semibold">{dict.splits.participantShares}</h2>
         </div>
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
-              <th className="px-4 py-3 font-medium">Participant</th>
-              <th className="px-4 py-3 font-medium">Owes</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Action</th>
+              <th className="px-4 py-3 font-medium">{dict.splits.participant}</th>
+              <th className="px-4 py-3 font-medium">{dict.splits.owes}</th>
+              <th className="px-4 py-3 font-medium">{dict.splits.status}</th>
+              <th className="px-4 py-3 font-medium">{dict.common.action}</th>
             </tr>
           </thead>
           <tbody>
@@ -255,10 +257,10 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
                     {share.share_status === "confirmed"
                       ? formatSettledAt(share.settled_at)
                       : share.share_status === "submitted"
-                        ? "Payment submitted"
+                        ? dict.splits.submitted
                         : share.share_status === "rejected"
-                          ? "Proof rejected"
-                          : "Unpaid"}
+                          ? dict.splits.proofRejected
+                          : dict.splits.unpaid}
                   </span>
                 </td>
                 <td className="px-4 py-3">

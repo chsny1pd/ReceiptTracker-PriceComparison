@@ -28,38 +28,47 @@ export default async function ReceiptDetailPage({
   const { data: receipt, error } = await supabase
     .from("receipts")
     .select(
-      "id, purchased_at, subtotal, tax, total, notes, image_object_key, stores(name, location), receipt_items(id, line_number, raw_name, quantity, unit, line_total, normalized_quantity, normalized_unit, normalized_unit_price, image_object_key, product:products(id, name))",
+      "id, owner_user_id, purchased_at, subtotal, tax, total, notes, image_object_key, stores(name, location), receipt_items(id, line_number, raw_name, quantity, unit, line_total, normalized_quantity, normalized_unit, normalized_unit_price, image_object_key, product:products(id, name))",
     )
     .eq("id", id)
-    .eq("owner_user_id", user.id)
     .single();
 
   if (error || !receipt) {
     notFound();
   }
 
+  const canManageReceipt = receipt.owner_user_id === user.id;
+
   const items = (
     (receipt.receipt_items ?? []) as unknown as ReceiptItemRow[]
   ).sort((left, right) => left.line_number - right.line_number);
+  const receiptTitle = relationName(
+    receipt.stores,
+    items[0]?.raw_name ? `${items[0].raw_name} receipt` : "Receipt",
+  );
 
   const [{ data: profiles }, { data: splits }, { data: paymentMethods }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, github_username, display_name")
-      .order("display_name"),
+    canManageReceipt
+      ? supabase
+          .from("profiles")
+          .select("id, github_username, display_name")
+          .order("display_name")
+      : Promise.resolve({ data: [] }),
     supabase
       .from("expense_splits")
       .select("id, split_method, total_amount, created_at, receipt_item_id")
       .eq("receipt_id", id)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("user_payment_methods")
-      .select(
-        "id, label, provider_name, account_name, account_reference, promptpay_id, qr_image_object_key, note, is_default",
-      )
-      .eq("owner_user_id", user.id)
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: true }),
+    canManageReceipt
+      ? supabase
+          .from("user_payment_methods")
+          .select(
+            "id, label, provider_name, account_name, account_reference, promptpay_id, qr_image_object_key, note, is_default",
+          )
+          .eq("owner_user_id", user.id)
+          .order("is_default", { ascending: false })
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] }),
   ]);
 
   const splitSummaries = (splits ?? []) as ReceiptSplitSummary[];
@@ -71,12 +80,12 @@ export default async function ReceiptDetailPage({
 
   return (
     <>
-      <PageHeader
-        title={relationName(receipt.stores, "Receipt")}
+        <PageHeader
+        title={receiptTitle}
         description={`Purchased on ${formatDate(receipt.purchased_at)}`}
         backHref="/receipts"
         backLabel="Back to receipts"
-        action={<DeleteReceiptButton receiptId={receipt.id} />}
+        action={canManageReceipt ? <DeleteReceiptButton receiptId={receipt.id} /> : undefined}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -125,14 +134,15 @@ export default async function ReceiptDetailPage({
           <tbody>
             {items?.map((item) => {
               const productId = relationId(item.product);
+              const productName = relationName(item.product, "");
 
               return (
               <tr key={item.id} className="border-b border-slate-100">
                 <td className="px-4 py-3">
                   <p className="font-medium">{item.raw_name}</p>
-                  <p className="text-slate-600">
-                    {relationName(item.product, "Product")}
-                  </p>
+                  {productName ? (
+                    <p className="text-slate-600">{productName}</p>
+                  ) : null}
                   {productId ? (
                     <Link
                       href={`/products/${productId}/history`}
@@ -170,14 +180,21 @@ export default async function ReceiptDetailPage({
       </section>
 
       <section className="mt-6 space-y-6">
-        <SplitForm
-          receiptId={receipt.id}
-          receiptTotal={Number(receipt.total)}
-          items={splitItems}
-          profiles={profiles ?? []}
-          currentUserId={user.id}
-          receiverPaymentMethods={(paymentMethods ?? []) as UserPaymentMethod[]}
-        />
+        {canManageReceipt ? (
+          <SplitForm
+            receiptId={receipt.id}
+            receiptTotal={Number(receipt.total)}
+            items={splitItems}
+            profiles={profiles ?? []}
+            currentUserId={user.id}
+            receiverPaymentMethods={(paymentMethods ?? []) as UserPaymentMethod[]}
+          />
+        ) : (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+            This receipt was shared with you through a split. You can review it here,
+            but only the owner can edit or create new splits from it.
+          </div>
+        )}
 
         {splitSummaries.length > 0 ? (
           <div className="rounded-lg border border-slate-300 bg-white p-5">

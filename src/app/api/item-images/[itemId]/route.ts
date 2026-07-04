@@ -24,9 +24,8 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const { data: item, error } = await supabase
     .from("receipt_items")
-    .select("image_object_key, receipts!inner(owner_user_id)")
+    .select("image_object_key")
     .eq("id", itemId)
-    .eq("receipts.owner_user_id", user.id)
     .single();
 
   if (error || !item?.image_object_key) {

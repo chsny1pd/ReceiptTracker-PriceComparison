@@ -499,6 +499,29 @@ as $$
   );
 $$;
 
+create or replace function public.can_access_receipt(p_receipt_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (
+    select 1
+    from public.receipts r
+    where r.id = p_receipt_id
+      and (
+        r.owner_user_id = auth.uid() or
+        exists (
+          select 1
+          from public.expense_splits s
+          where s.receipt_id = r.id
+            and public.can_access_split(s.id)
+        )
+      )
+  );
+$$;
+
 create or replace function public.can_manage_split(p_split_id uuid)
 returns boolean
 language sql
@@ -1080,25 +1103,36 @@ to authenticated
 using (owner_user_id = auth.uid())
 with check (owner_user_id = auth.uid());
 
-create policy "receipts_manage_own"
+create policy "receipts_select_accessible"
 on public.receipts
-for all
+for select
+to authenticated
+using (public.can_access_receipt(id));
+
+create policy "receipts_insert_own"
+on public.receipts
+for insert
+to authenticated
+with check (owner_user_id = auth.uid());
+
+create policy "receipts_update_own"
+on public.receipts
+for update
 to authenticated
 using (owner_user_id = auth.uid())
 with check (owner_user_id = auth.uid());
 
-create policy "receipt_items_select_own_receipt"
+create policy "receipts_delete_own"
+on public.receipts
+for delete
+to authenticated
+using (owner_user_id = auth.uid());
+
+create policy "receipt_items_select_accessible_receipt"
 on public.receipt_items
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.receipts r
-    where r.id = receipt_items.receipt_id
-      and r.owner_user_id = auth.uid()
-  )
-);
+using (public.can_access_receipt(receipt_id));
 
 create policy "receipt_items_insert_own_receipt"
 on public.receipt_items

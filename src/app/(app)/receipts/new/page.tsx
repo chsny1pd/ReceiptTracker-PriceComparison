@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/page-header";
 import { ReceiptForm } from "@/components/receipt-form";
 import { getRequiredUser } from "@/lib/auth";
 import type { ReceiptDraftPayload } from "@/lib/receipt-drafts";
+import { getServerI18n } from "@/lib/server-preferences";
 import type { Product, Store } from "@/lib/types";
 
 export default async function NewReceiptPage({
@@ -11,6 +12,7 @@ export default async function NewReceiptPage({
 }) {
   const query = await searchParams;
   const { supabase, user } = await getRequiredUser();
+  const { dict } = await getServerI18n();
 
   const [{ data: stores }, { data: products }] = await Promise.all([
     supabase
@@ -43,19 +45,19 @@ export default async function NewReceiptPage({
   return (
     <>
       <PageHeader
-        title="Log a receipt"
-        description="Enter store details, line items, and optionally upload a receipt image to Cloudflare R2."
+        title={dict.receipts.logReceipt}
+        description={dict.receipts.newDescription}
         backHref="/receipts"
-        backLabel="Back to receipts"
+        backLabel={dict.receipts.title}
       />
 
       {storeList.length === 0 || productList.length === 0 ? (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {storeList.length === 0 ? (
-            <p>Create at least one store before saving a receipt.</p>
+            <p>{dict.receipts.needStore}</p>
           ) : null}
           {productList.length === 0 ? (
-            <p>Create at least one product before adding line items.</p>
+            <p>{dict.receipts.needProduct}</p>
           ) : null}
         </div>
       ) : null}

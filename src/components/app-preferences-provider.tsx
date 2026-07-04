@@ -30,17 +30,24 @@ function writeCookie(name: string, value: string) {
   document.cookie = `${name}=${value}; path=/; max-age=31536000; samesite=lax`;
 }
 
+function resolveTheme(theme: ThemePreference) {
+  if (theme === "system") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+
+  return theme;
+}
+
 function applyTheme(theme: ThemePreference) {
   const root = document.documentElement;
-  const resolved =
-    theme === "system"
-      ? window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light"
-      : theme;
+  const resolved = resolveTheme(theme);
 
   root.classList.toggle("dark", resolved === "dark");
+  root.classList.toggle("light", resolved === "light");
   root.dataset.theme = resolved;
+  root.style.colorScheme = resolved;
 }
 
 export function AppPreferencesProvider({
@@ -58,6 +65,7 @@ export function AppPreferencesProvider({
   useEffect(() => {
     applyTheme(theme);
     writeCookie(THEME_COOKIE_NAME, theme);
+    window.localStorage.setItem(THEME_COOKIE_NAME, theme);
   }, [theme]);
 
   useEffect(() => {

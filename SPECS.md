@@ -81,6 +81,7 @@ Requirements:
 - RLS stays enabled on all app tables.
 - Never trust client-supplied ownership fields.
 - R2 server credentials must never reach the browser.
+- Split participants may view source receipts and receipt/item images for splits they are involved in, but source receipt edits remain owner-only.
 
 ## 7. Database Source of Truth
 
@@ -120,6 +121,7 @@ Table:
 Behavior:
 - owned by one user
 - stores a draft payload as JSON
+- payload includes an explicit user-edited draft title / item name for resume UX
 - can be autosaved locally and server-backed
 - can be resumed, updated, discarded, or finalized into a real receipt
 - must not appear in saved price history, saved insights, balances, or split logic
@@ -222,18 +224,13 @@ Receiver-selected payment method:
 
 ### 10.1 Compare
 
-`/compare` must expose two clear modes:
-
-1. Quick Compare
+`/compare` is the fast decision page:
 - manual entry for pre-purchase comparison
 - user enters candidate brands/options
 - app compares normalized unit prices
-- user may turn result into a receipt draft
-
-2. Saved Price Insights
-- based only on final receipts
-- compare latest saved store prices for a product
-- link to full price history
+- cheapest option can be added to a cart
+- compare cart can become a receipt draft in one step
+- do not dedicate page space to a low-value saved-insights side panel
 
 ### 10.2 Receipts
 
@@ -243,10 +240,16 @@ Receiver-selected payment method:
 - resume or discard actions for drafts
 
 `/receipts/new` must support:
+- explicit item / draft title field in receipt details
 - local autosave
 - server-backed autosave
 - draft resume from visible draft list
 - compare-to-receipt handoff
+
+`/receipts/[id]` must support:
+- normal full access for the receipt owner
+- read-only source-receipt access for split participants who owe or review that receipt
+- owner-only edit, delete, and split-creation controls
 
 Receipt-first improvement priority:
 - protect work first with autosave and resumption
@@ -353,15 +356,17 @@ Secondary content may include:
 
 ### Compare
 
-Compare must make the two intents obvious:
-- manual decision support now
-- saved receipt-derived insights
+Compare must feel operational:
+- full-width quick compare flow
+- clear compare -> cart -> receipt progression
+- no filler side panel that distracts from the in-store decision task
 
 ### Receipts
 
 Receipts must feel safe for rushed use:
 - draft persistence
 - visible resume path
+- draft list labels based on explicit item / draft names, not store placeholders
 - fewer chances to lose work
 
 ### Splits

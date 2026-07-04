@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { AddProductModal } from "@/components/add-product-modal";
+import { useAppPreferences } from "@/components/app-preferences-provider";
 import { CompareCartPanel } from "@/components/compare/compare-cart-panel";
 import {
   buildBrandCompareRow,
@@ -38,6 +39,7 @@ function CompareSummary({
   outcome: BrandCompareOutcome;
   productName: string | null;
 }) {
+  const { dict } = useAppPreferences();
   if (
     outcome.kind === "none" ||
     outcome.kind === "incomplete" ||
@@ -49,9 +51,9 @@ function CompareSummary({
   if (outcome.kind === "unit_mismatch") {
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-900">
-        <p className="font-semibold">Different units across brands</p>
+        <p className="font-semibold">{dict.compare.unitMismatchTitle}</p>
         <p className="mt-1">
-          Use the same unit type on every brand row to compare fairly.
+          {dict.compare.unitMismatchBody}
         </p>
       </div>
     );
@@ -60,7 +62,7 @@ function CompareSummary({
   if (outcome.kind === "tie") {
     return (
       <div className="rounded-lg border border-slate-300 bg-white px-4 py-4 text-sm text-slate-700">
-        <p className="font-semibold">Same normalized price</p>
+        <p className="font-semibold">{dict.compare.tieTitle}</p>
         <p className="mt-1">
           Every brand works out to{" "}
           <strong>{formatUnitPrice(outcome.price, outcome.unit)}</strong>.
@@ -71,11 +73,13 @@ function CompareSummary({
 
   return (
     <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
-      <p className="font-semibold">{outcome.winnerBrandName} is cheapest</p>
+      <p className="font-semibold">
+        {outcome.winnerBrandName} {dict.compare.winnerSuffix}
+      </p>
       <p className="mt-1">
-        Save up to{" "}
+        {dict.compare.saveUpTo}{" "}
         <strong>{formatUnitPrice(outcome.savings, outcome.unit)}</strong> per{" "}
-        {outcome.unit}
+        {dict.compare.per} {outcome.unit}
         {productName ? (
           <>
             {" "}
@@ -90,6 +94,7 @@ function CompareSummary({
 
 export function CompareForm({ products }: CompareFormProps) {
   const router = useRouter();
+  const { dict } = useAppPreferences();
   const [productId, setProductId] = useState("");
   const [brandLines, setBrandLines] = useState<DraftBrandLine[]>(() => [
     emptyBrandLine(),
@@ -222,13 +227,13 @@ export function CompareForm({ products }: CompareFormProps) {
     setFormError(null);
 
     if (!productId) {
-      setFormError("Select a product.");
+      setFormError(dict.compare.selectProduct + ".");
       return;
     }
 
     const trimmedNames = brandLines.map((line) => line.brandName.trim());
     if (trimmedNames.some((name) => !name)) {
-      setFormError("Enter a brand name on every row.");
+      setFormError(`${dict.compare.brand}: required on every row.`);
       return;
     }
 
@@ -255,22 +260,18 @@ export function CompareForm({ products }: CompareFormProps) {
   return (
     <div className="space-y-6">
         <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-          <p className="font-medium text-slate-900">How this works</p>
+          <p className="font-medium text-slate-900">{dict.compare.howItWorks}</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>Pick a product and enter shelf prices for each brand.</li>
-            <li>Add more brands if you are comparing more than two options.</li>
-            <li>
-              Compare normalized unit prices, then add the winner to your cart.
-            </li>
+            <li>{dict.compare.howItWorks1}</li>
+            <li>{dict.compare.howItWorks2}</li>
+            <li>{dict.compare.howItWorks3}</li>
           </ol>
         </div>
 
         {products.length === 0 ? (
           <div className="rounded-lg border border-slate-300 bg-white px-4 py-4 text-sm text-slate-700">
-            <p className="font-medium text-slate-900">No products yet</p>
-            <p className="mt-1">
-              Add a product to start comparing shelf prices across brands.
-            </p>
+            <p className="font-medium text-slate-900">{dict.compare.noProducts}</p>
+            <p className="mt-1">{dict.compare.noProductsBody}</p>
             {formError ? (
               <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {formError}
@@ -281,7 +282,7 @@ export function CompareForm({ products }: CompareFormProps) {
               onClick={() => setProductModalOpen(true)}
               className={`mt-3 ${secondaryActionButtonClassName}`}
             >
-              Add product
+              {dict.compare.addProduct}
             </button>
           </div>
         ) : null}
@@ -295,17 +296,17 @@ export function CompareForm({ products }: CompareFormProps) {
           ) : null}
 
           <section className="rounded-lg border border-slate-300 bg-white p-5">
-            <h2 className="text-lg font-semibold">Compare details</h2>
+            <h2 className="text-lg font-semibold">{dict.compare.compareDetails}</h2>
             <div className="mt-4">
               <label className="grid gap-2 text-sm">
                 <span className="flex items-center justify-between gap-3">
-                  <span className="font-medium">Product</span>
+                  <span className="font-medium">{dict.compare.product}</span>
                   <button
                     type="button"
                     onClick={() => setProductModalOpen(true)}
                     className={secondaryActionButtonClassName}
                   >
-                    Add product
+                    {dict.compare.addProduct}
                   </button>
                 </span>
                 <select
@@ -315,7 +316,7 @@ export function CompareForm({ products }: CompareFormProps) {
                   className="h-11 rounded-lg border border-slate-300 px-3"
                 >
                   <option value="" disabled>
-                    Select product
+                    {dict.compare.selectProduct}
                   </option>
                   {products.map((product) => (
                     <option key={product.id} value={product.id}>
@@ -339,12 +340,13 @@ export function CompareForm({ products }: CompareFormProps) {
           <section className="rounded-lg border border-slate-300 bg-white p-5">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-semibold">Brands</h2>
+              
               <button
                 type="button"
                 onClick={addBrandLine}
                 className={secondaryActionButtonClassName}
               >
-                More brand
+                {dict.compare.moreBrand}
               </button>
             </div>
 
@@ -394,16 +396,17 @@ export function CompareForm({ products }: CompareFormProps) {
                         {isWinner ? (
                           <span className="inline-flex rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
                             Cheapest
+                            
                           </span>
                         ) : null}
                         {isTie ? (
                           <span className="inline-flex rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-700">
-                            Same price
+                            {dict.compare.samePrice}
                           </span>
                         ) : null}
                         {isHigher ? (
                           <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            Higher
+                            {dict.compare.higher}
                           </span>
                         ) : null}
                       </div>
@@ -417,14 +420,14 @@ export function CompareForm({ products }: CompareFormProps) {
                           }
                           className="text-sm text-red-600 hover:text-red-700"
                         >
-                          Remove
+                          {dict.common.remove}
                         </button>
                       ) : null}
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">
                       <label className="grid gap-2 text-sm">
-                        <span className="font-medium">Brand</span>
+                        <span className="font-medium">{dict.compare.brand}</span>
                         <input
                           value={line.brandName}
                           onChange={(event) =>
@@ -438,7 +441,7 @@ export function CompareForm({ products }: CompareFormProps) {
                         />
                       </label>
                       <label className="grid gap-2 text-sm">
-                        <span className="font-medium">Quantity</span>
+                        <span className="font-medium">{dict.common.quantity}</span>
                         <input
                           type="number"
                           min="0.001"
@@ -454,7 +457,7 @@ export function CompareForm({ products }: CompareFormProps) {
                         />
                       </label>
                       <label className="grid gap-2 text-sm">
-                        <span className="font-medium">Unit</span>
+                        <span className="font-medium">{dict.common.unit}</span>
                         <select
                           value={line.unit}
                           onChange={(event) =>
@@ -473,7 +476,7 @@ export function CompareForm({ products }: CompareFormProps) {
                         </select>
                       </label>
                       <label className="grid gap-2 text-sm">
-                        <span className="font-medium">Line total</span>
+                        <span className="font-medium">{dict.compare.lineTotal}</span>
                         <input
                           type="number"
                           min="0"
@@ -484,14 +487,14 @@ export function CompareForm({ products }: CompareFormProps) {
                               lineTotal: event.target.value,
                             })
                           }
-                          placeholder="Shelf price"
+                          placeholder={dict.compare.shelfPrice}
                           required
                           className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
                         />
-                        <p className="text-xs text-slate-500">Includes 7% VAT.</p>
+                        <p className="text-xs text-slate-500">{dict.compare.includesVat}</p>
                       </label>
                       <div className="grid gap-2 text-sm md:col-span-2">
-                        <span className="font-medium">Normalized preview</span>
+                        <span className="font-medium">{dict.compare.normalizedPreview}</span>
                         <p
                           className={`flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums ${
                             isWinner ? "text-emerald-800" : "text-slate-700"
@@ -502,7 +505,7 @@ export function CompareForm({ products }: CompareFormProps) {
                                 preview.normalizedUnitPrice,
                                 preview.normalizedUnit,
                               )
-                            : "Enter quantity and line total"}
+                            : dict.compare.enterQuantityAndLineTotal}
                         </p>
                       </div>
                     </div>
@@ -514,7 +517,7 @@ export function CompareForm({ products }: CompareFormProps) {
                           onClick={() => addToCart(row)}
                           className="inline-flex h-9 items-center justify-center rounded-lg border border-emerald-300 px-3 text-sm font-medium text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-sm"
                         >
-                          Add to Cart
+                          {dict.compare.addToCart}
                         </button>
                       </div>
                     ) : null}
@@ -527,7 +530,7 @@ export function CompareForm({ products }: CompareFormProps) {
               type="submit"
               className="mt-6 inline-flex h-12 items-center justify-center rounded-lg bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
-              Compare prices
+              {dict.compare.comparePrices}
             </button>
           </section>
         </form>
@@ -535,8 +538,8 @@ export function CompareForm({ products }: CompareFormProps) {
 
         {products.length > 0 && compared && outcome.kind === "winner" ? (
           <p className="text-sm text-slate-600">
-            Largest gap: {formatMoney(outcome.savings)} per {outcome.unit}{" "}
-            between the cheapest and most expensive brand.
+            {dict.compare.largestGap} {formatMoney(outcome.savings)} {dict.compare.per}{" "}
+            {outcome.unit} {dict.compare.betweenCheapestAndMostExpensive}
           </p>
         ) : null}
 
@@ -545,7 +548,8 @@ export function CompareForm({ products }: CompareFormProps) {
             href={`/products/${productId}/history`}
             className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
           >
-            View full price history for {selectedProduct?.name ?? "this product"}
+            {dict.compare.viewFullPriceHistory}{" "}
+            {selectedProduct?.name ?? dict.compare.thisProduct}
           </Link>
         ) : null}
 

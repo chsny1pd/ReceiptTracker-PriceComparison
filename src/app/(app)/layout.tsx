@@ -1,20 +1,15 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getOptionalUserContext } from "@/lib/auth";
 import { profileLabel } from "@/lib/supabase-helpers";
-
-export const dynamic = "force-dynamic";
 
 export default async function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getOptionalUserContext();
 
   if (!user) {
     redirect("/login");

@@ -11,6 +11,7 @@ export type CompareCartItem = {
 };
 
 export type CompareCartReceiptDraft = {
+  title: string;
   lines: Array<{
     productId: string;
     rawName: string;
@@ -103,7 +104,14 @@ export function buildReceiptDraftFromCart(
     return null;
   }
 
+  const firstProductName = items[0]?.productName.trim() || "Compared items";
+  const extraCount = items.length - 1;
+
   return {
+    title:
+      extraCount > 0
+        ? `${firstProductName} + ${extraCount} more`
+        : firstProductName,
     lines: items.map((item) => ({
       productId: item.productId,
       rawName: item.brandName,
@@ -138,7 +146,15 @@ export function loadCompareCartReceiptDraft(): CompareCartReceiptDraft | null {
       return null;
     }
 
-    return JSON.parse(raw) as CompareCartReceiptDraft;
+    const parsed = JSON.parse(raw) as Partial<CompareCartReceiptDraft> | null;
+    if (!parsed || !Array.isArray(parsed.lines)) {
+      return null;
+    }
+
+    return {
+      title: typeof parsed.title === "string" ? parsed.title : "",
+      lines: parsed.lines,
+    };
   } catch {
     return null;
   }
