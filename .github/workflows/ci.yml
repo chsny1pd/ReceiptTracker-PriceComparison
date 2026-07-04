@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  lint-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: example-anon-key
+          CLOUDFLARE_R2_ACCOUNT_ID: "00000000000000000000000000000000"
+          CLOUDFLARE_R2_ACCESS_KEY_ID: example-access-key
+          CLOUDFLARE_R2_SECRET_ACCESS_KEY: example-secret-key
+          CLOUDFLARE_R2_BUCKET: example-bucket

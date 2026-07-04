@@ -123,6 +123,15 @@ export function CompareForm({
         </button>
       </form>
 
+      {productId ? (
+        <Link
+          href={`/products/${productId}/history`}
+          className="inline-flex text-sm font-medium text-emerald-700"
+        >
+          View price history for selected product
+        </Link>
+      ) : null}
+
       {rows.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2">
           {rows.map((row) => (

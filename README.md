@@ -6,25 +6,19 @@ This repository is a base project. It already contains Next.js, Tailwind CSS, Su
 
 ## Current Status
 
-Implemented:
-- Next.js App Router project with TypeScript and Tailwind CSS.
-- Landing page at `/`.
-- GitHub OAuth sign-in route at `/auth/sign-in`.
-- Supabase OAuth callback route at `/auth/callback`.
-- Protected dashboard shell at `/dashboard`.
-- Cloudflare R2 presigned upload route at `/api/receipt-images/presign`.
-- Cloudflare R2 signed view route at `/api/receipt-images/[receiptId]`.
-- Complete database schema in `supabase/schema.sql`.
-- AI handoff docs: `SPECS.md`, `DESIGN.md`, `PROJECT_AUDIT.md`, `TODO.md`.
+Implemented app features:
+- GitHub OAuth login and protected app shell.
+- Receipt CRUD with store/product quick-add and optional R2 image upload.
+- Unit-normalized price comparison across two stores.
+- Product price history chart and accessible table.
+- Expense splits (even/custom) and split detail page.
+- Netted balances with mark-settled actions.
+- Service health page at `/setup`.
+- GitHub Actions CI for lint and build.
 
-Not implemented yet:
-- Receipt CRUD UI and server actions.
-- Product/store management UI.
-- Price comparison UI/API.
-- Product history UI/API.
-- Split creation UI/API.
-- Netted balances UI/API.
-- Real Supabase/R2 integration testing with live credentials.
+Demo walkthrough: see `docs/DEMO.md`.
+
+Deploy target: Vercel with Supabase + R2 env vars and production OAuth/CORS URLs.
 
 ## Tech Stack
 
@@ -139,6 +133,16 @@ npm run build
 
 Expected result: both pass.
 
+CI also runs on GitHub push/PR via `.github/workflows/ci.yml`.
+
+## Deploy to Vercel
+
+1. Push the repository to GitHub.
+2. Import the project in Vercel.
+3. Copy all variables from `.env.example` into Vercel project settings.
+4. Add Supabase production callback URL and R2 production CORS origin.
+5. Deploy, then verify `/setup` and run the flow in `docs/DEMO.md`.
+
 ## Important Files
 
 ```text
@@ -146,6 +150,8 @@ SPECS.md                              Full product and technical spec
 DESIGN.md                             UX/UI and interaction design
 PROJECT_AUDIT.md                      Current repository audit and risks
 TODO.md                               Build roadmap
+docs/DEMO.md                          Demo script and deploy checklist
+.github/workflows/ci.yml              Lint/build CI
 supabase/schema.sql                   Database source of truth
 src/lib/supabase/server.ts            Supabase server client
 src/lib/supabase/client.ts            Supabase browser client

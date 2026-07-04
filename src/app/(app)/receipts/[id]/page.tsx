@@ -4,10 +4,11 @@ import { notFound } from "next/navigation";
 import { deleteReceipt } from "@/app/actions/receipts";
 import { PageHeader } from "@/components/page-header";
 import { ReceiptImage } from "@/components/receipt-image";
+import { SplitForm } from "@/components/splits/split-form";
 import { getRequiredUser } from "@/lib/auth";
 import { formatDate, formatMoney, formatUnitPrice } from "@/lib/format";
-import { relationName } from "@/lib/supabase-helpers";
-import type { ReceiptItemRow } from "@/lib/types";
+import { relationId, relationName } from "@/lib/supabase-helpers";
+import type { ReceiptItemRow, ReceiptSplitSummary } from "@/lib/types";
 
 type ReceiptDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -35,6 +36,25 @@ export default async function ReceiptDetailPage({
   const items = (
     (receipt.receipt_items ?? []) as unknown as ReceiptItemRow[]
   ).sort((left, right) => left.line_number - right.line_number);
+
+  const [{ data: profiles }, { data: splits }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, github_username, display_name")
+      .order("display_name"),
+    supabase
+      .from("expense_splits")
+      .select("id, split_method, total_amount, created_at, receipt_item_id")
+      .eq("receipt_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const splitSummaries = (splits ?? []) as ReceiptSplitSummary[];
+  const splitItems = items.map((item) => ({
+    id: item.id,
+    rawName: item.raw_name,
+    lineTotal: Number(item.line_total),
+  }));
 
   return (
     <>
@@ -100,13 +120,24 @@ export default async function ReceiptDetailPage({
             </tr>
           </thead>
           <tbody>
-            {items?.map((item) => (
+            {items?.map((item) => {
+              const productId = relationId(item.product);
+
+              return (
               <tr key={item.id} className="border-b border-slate-100">
                 <td className="px-4 py-3">
                   <p className="font-medium">{item.raw_name}</p>
                   <p className="text-slate-600">
                     {relationName(item.product, "Product")}
                   </p>
+                  {productId ? (
+                    <Link
+                      href={`/products/${productId}/history`}
+                      className="mt-1 inline-flex text-sm font-medium text-emerald-700"
+                    >
+                      View price history
+                    </Link>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3 tabular-nums">
                   {item.quantity} {item.unit}
@@ -121,16 +152,57 @@ export default async function ReceiptDetailPage({
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </section>
 
+      <section className="mt-6 space-y-6">
+        <SplitForm
+          receiptId={receipt.id}
+          receiptTotal={Number(receipt.total)}
+          items={splitItems}
+          profiles={profiles ?? []}
+          currentUserId={user.id}
+        />
+
+        {splitSummaries.length > 0 ? (
+          <div className="rounded-lg border border-slate-300 bg-white p-5">
+            <h2 className="text-lg font-semibold">Existing splits</h2>
+            <ul className="mt-4 divide-y divide-slate-200">
+              {splitSummaries.map((split) => (
+                <li
+                  key={split.id}
+                  className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="font-medium capitalize">
+                      {split.split_method} split ·{" "}
+                      {formatMoney(Number(split.total_amount))}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      {split.receipt_item_id ? "Line item split" : "Whole receipt"}{" "}
+                      · {formatDate(split.created_at.slice(0, 10))}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/splits/${split.id}`}
+                    className="text-sm font-medium text-emerald-700"
+                  >
+                    Open split
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
+
       <p className="mt-6 text-sm text-slate-600">
-        Product history and splits can be added from this receipt in the next
-        phases.{" "}
+        Use product history links above to review trends, or{" "}
         <Link href="/compare" className="font-medium text-emerald-700">
-          Compare prices
+          compare latest store prices
         </Link>
         .
       </p>

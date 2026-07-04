@@ -13,3 +13,27 @@ export function relationName(value: unknown, fallback = "Unknown") {
 
   return fallback;
 }
+
+export function relationId(value: unknown) {
+  if (Array.isArray(value)) {
+    const first = value[0];
+    if (first && typeof first === "object" && "id" in first) {
+      return String((first as { id: string }).id);
+    }
+    return null;
+  }
+
+  if (value && typeof value === "object" && "id" in value) {
+    return String((value as { id: string }).id);
+  }
+
+  return null;
+}
+
+export function profileLabel(
+  displayName: string | null | undefined,
+  githubUsername: string | null | undefined,
+  fallback: string,
+) {
+  return displayName ?? githubUsername ?? fallback;
+}

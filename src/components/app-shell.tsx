@@ -17,12 +17,15 @@ export function AppShell({ children, email }: AppShellProps) {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
       <header className="border-b border-slate-300 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-8">
-            <Link href="/dashboard" className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
+            <Link
+              href="/dashboard"
+              className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700"
+            >
               Spendly
             </Link>
-            <nav className="flex flex-wrap gap-2">
+            <nav className="flex flex-wrap gap-1 sm:gap-2" aria-label="Main">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
@@ -35,7 +38,9 @@ export function AppShell({ children, email }: AppShellProps) {
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-600">{email}</span>
+            <span className="hidden max-w-40 truncate text-sm text-slate-600 sm:inline">
+              {email}
+            </span>
             <form action="/auth/sign-out" method="post">
               <button
                 type="submit"
@@ -47,7 +52,7 @@ export function AppShell({ children, email }: AppShellProps) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-8 md:px-6">{children}</main>
     </div>
   );
 }

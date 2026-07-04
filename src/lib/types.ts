@@ -54,3 +54,65 @@ export type BalanceRow = {
   creditor_display_name: string | null;
   amount: number;
 };
+
+export type ProductHistoryRow = {
+  receipt_item_id: string;
+  receipt_id: string;
+  store_id: string;
+  store_name: string;
+  purchased_at: string;
+  receipt_created_at: string;
+  normalized_quantity: number;
+  normalized_unit: SpendlyUnit;
+  normalized_unit_price: number;
+  line_total: number;
+};
+
+export type ProfileOption = {
+  id: string;
+  github_username: string | null;
+  display_name: string | null;
+};
+
+export type ReceiptSplitSummary = {
+  id: string;
+  split_method: "even" | "custom";
+  total_amount: number;
+  created_at: string;
+  receipt_item_id: string | null;
+};
+
+export type SplitShareDetail = {
+  id: string;
+  participant_user_id: string;
+  owed_amount: number;
+  settled_at: string | null;
+  participant_display_name: string | null;
+  participant_github_username: string | null;
+};
+
+export type SplitDetail = {
+  id: string;
+  receipt_id: string;
+  receipt_item_id: string | null;
+  split_method: "even" | "custom";
+  total_amount: number;
+  created_at: string;
+  payer_user_id: string;
+  payer_display_name: string | null;
+  payer_github_username: string | null;
+  shares: SplitShareDetail[];
+};
+
+export type UnsettledShareRow = {
+  id: string;
+  split_id: string;
+  owed_amount: number;
+  participant_user_id: string;
+  participant_display_name: string | null;
+  participant_github_username: string | null;
+  payer_user_id: string;
+  payer_display_name: string | null;
+  payer_github_username: string | null;
+  receipt_id: string;
+};

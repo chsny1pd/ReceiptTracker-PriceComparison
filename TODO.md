@@ -111,15 +111,15 @@ This roadmap is ordered for fastest working school demo.
 
 ## Phase 9: Quality and Demo Polish
 
-- [ ] Add GitHub Actions workflow for lint/build.
-- [ ] Add seed/demo instructions.
-- [ ] Add loading states for async pages.
-- [ ] Add form validation summaries.
-- [ ] Add accessible chart table.
-- [ ] Test at 375px mobile width.
-- [ ] Test keyboard navigation.
-- [ ] Test no horizontal scroll.
-- [ ] Run `npm run lint`.
-- [ ] Run `npm run build`.
+- [x] Add GitHub Actions workflow for lint/build.
+- [x] Add seed/demo instructions.
+- [x] Add loading states for async pages.
+- [x] Add form validation summaries.
+- [x] Add accessible chart table.
+- [x] Test at 375px mobile width.
+- [x] Test keyboard navigation.
+- [x] Test no horizontal scroll.
+- [x] Run `npm run lint`.
+- [x] Run `npm run build`.
 - [ ] Deploy to Vercel.
 

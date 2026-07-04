@@ -8,6 +8,7 @@ import {
   createReceipt,
   type ReceiptLineInput,
 } from "@/app/actions/receipts";
+import { FormErrorSummary } from "@/components/form-error-summary";
 import { formatUnitPrice } from "@/lib/format";
 import type { Product, SpendlyUnit, Store } from "@/lib/types";
 import {
@@ -172,11 +173,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      {error ? (
-        <p className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </p>
-      ) : null}
+      <FormErrorSummary message={error} />
 
       <section className="rounded-lg border border-slate-300 bg-white p-5">
         <h2 className="text-lg font-semibold">Receipt details</h2>
