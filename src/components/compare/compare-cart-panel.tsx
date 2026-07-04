@@ -26,8 +26,8 @@ export function CompareCartPanel({
   );
 
   return (
-    <aside className="w-full shrink-0 lg:w-80">
-      <div className="sticky top-6 rounded-lg border border-slate-300 bg-white p-5">
+    <aside className="w-full">
+      <div className="rounded-lg border border-slate-300 bg-white p-5">
         <h2 className="text-lg font-semibold">Cart</h2>
         <p className="mt-1 text-sm text-slate-600">
           Items from your compare results.

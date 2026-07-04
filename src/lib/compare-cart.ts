@@ -24,6 +24,7 @@ export const COMPARE_CART_STORAGE_KEY = "spendly:compare-cart";
 export const COMPARE_CART_RECEIPT_DRAFT_KEY = "spendly:compare-cart-receipt-draft";
 
 let consumedReceiptDraft: CompareCartReceiptDraft | null | undefined;
+let consumedReceiptDraftSearch: string | null = null;
 
 export function compareCartItemKey(productId: string, brandName: string) {
   return `${productId}:${brandName.trim().toLowerCase()}`;
@@ -118,6 +119,8 @@ export function saveCompareCartReceiptDraft(draft: CompareCartReceiptDraft) {
     return;
   }
 
+  consumedReceiptDraft = undefined;
+  consumedReceiptDraftSearch = null;
   window.sessionStorage.setItem(
     COMPARE_CART_RECEIPT_DRAFT_KEY,
     JSON.stringify(draft),
@@ -146,12 +149,14 @@ export function consumeCompareCartReceiptDraft(): CompareCartReceiptDraft | null
     return null;
   }
 
-  if (consumedReceiptDraft !== undefined) {
+  const search = window.location.search;
+  if (consumedReceiptDraftSearch === search && consumedReceiptDraft !== undefined) {
     return consumedReceiptDraft;
   }
 
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(search);
   if (params.get("from") !== "compare") {
+    consumedReceiptDraftSearch = search;
     consumedReceiptDraft = null;
     return null;
   }
@@ -161,6 +166,7 @@ export function consumeCompareCartReceiptDraft(): CompareCartReceiptDraft | null
     window.sessionStorage.removeItem(COMPARE_CART_RECEIPT_DRAFT_KEY);
   }
 
+  consumedReceiptDraftSearch = search;
   consumedReceiptDraft = draft;
   return draft;
 }
@@ -170,6 +176,8 @@ export function clearCompareCartReceiptDraft() {
     return;
   }
 
+  consumedReceiptDraft = undefined;
+  consumedReceiptDraftSearch = null;
   window.sessionStorage.removeItem(COMPARE_CART_RECEIPT_DRAFT_KEY);
 }
 

@@ -121,16 +121,17 @@ export function ReceiptForm({
   const [error, setError] = useState<string | null>(null);
 
   const compareDraft = consumeCompareCartReceiptDraft();
-  const localDraft = initialDraft ? null : loadLocalReceiptDraft();
+  const localDraft =
+    initialDraft || compareDraft ? null : loadLocalReceiptDraft();
   const effectiveInitialDraft =
     initialDraft ??
-    localDraft ??
     (compareDraft
       ? {
           ...blankReceiptDraftPayload(),
           lines: draftLineToState(compareDraft),
         }
-      : null);
+      : null) ??
+    localDraft;
 
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
   const [storeId, setStoreId] = useState(

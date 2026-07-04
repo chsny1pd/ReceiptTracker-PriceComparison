@@ -40,15 +40,13 @@ export default async function ComparePage() {
         description={dict.compare.description}
       />
 
-      <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-lg border border-slate-300 bg-white p-5">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">{dict.compare.quickTab}</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Manual shelf-price checks for rushed decisions before you buy.
-              </p>
-            </div>
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
+        <div className="min-w-0">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold">{dict.compare.quickTab}</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Manual shelf-price checks for rushed decisions before you buy.
+            </p>
           </div>
           <CompareForm products={(products ?? []) as Product[]} />
         </div>

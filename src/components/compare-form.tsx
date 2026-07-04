@@ -253,10 +253,7 @@ export function CompareForm({ products }: CompareFormProps) {
   }
 
   return (
-    <div
-      className={`space-y-6 ${showCart ? "lg:flex lg:items-start lg:gap-6 lg:space-y-0" : ""}`}
-    >
-      <div className={`space-y-6 ${showCart ? "min-w-0 flex-1" : ""}`}>
+    <div className="space-y-6">
         <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-700">
           <p className="font-medium text-slate-900">How this works</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
@@ -329,6 +326,15 @@ export function CompareForm({ products }: CompareFormProps) {
               </label>
             </div>
           </section>
+
+          {showCart ? (
+            <CompareCartPanel
+              items={cartItems}
+              onUpdateQuantity={updateCartQuantity}
+              onRemove={removeCartItem}
+              onCreateReceipt={handleCreateReceipt}
+            />
+          ) : null}
 
           <section className="rounded-lg border border-slate-300 bg-white p-5">
             <div className="flex items-center justify-between gap-4">
@@ -542,16 +548,6 @@ export function CompareForm({ products }: CompareFormProps) {
             View full price history for {selectedProduct?.name ?? "this product"}
           </Link>
         ) : null}
-      </div>
-
-      {showCart ? (
-        <CompareCartPanel
-          items={cartItems}
-          onUpdateQuantity={updateCartQuantity}
-          onRemove={removeCartItem}
-          onCreateReceipt={handleCreateReceipt}
-        />
-      ) : null}
 
       <AddProductModal
         open={productModalOpen}
