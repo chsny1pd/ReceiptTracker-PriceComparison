@@ -8,6 +8,26 @@ export function getRequiredEnv(name: string): string {
   return value;
 }
 
+export function hasEnv(name: string) {
+  return Boolean(process.env[name]?.trim());
+}
+
+export function hasSupabaseEnv() {
+  return (
+    hasEnv("NEXT_PUBLIC_SUPABASE_URL") &&
+    hasEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  );
+}
+
+export function hasR2Env() {
+  return (
+    hasEnv("CLOUDFLARE_R2_ACCOUNT_ID") &&
+    hasEnv("CLOUDFLARE_R2_ACCESS_KEY_ID") &&
+    hasEnv("CLOUDFLARE_R2_SECRET_ACCESS_KEY") &&
+    hasEnv("CLOUDFLARE_R2_BUCKET")
+  );
+}
+
 export function getSupabaseEnv() {
   return {
     url: getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),

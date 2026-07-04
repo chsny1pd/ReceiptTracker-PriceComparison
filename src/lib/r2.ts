@@ -1,4 +1,4 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
 
 import { getR2Env } from "@/lib/env";
 
@@ -29,4 +29,19 @@ export function extensionForContentType(contentType: string) {
   }
 
   return "jpg";
+}
+
+export async function deleteR2Object(objectKey: string) {
+  const client = createR2Client();
+  await client.send(
+    new DeleteObjectCommand({
+      Bucket: getR2BucketName(),
+      Key: objectKey,
+    }),
+  );
+}
+
+export async function checkR2Connection() {
+  const client = createR2Client();
+  await client.send(new HeadBucketCommand({ Bucket: getR2BucketName() }));
 }
