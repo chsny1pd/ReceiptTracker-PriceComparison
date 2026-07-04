@@ -2,9 +2,19 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
+import { CompareCartPanel } from "@/components/compare/compare-cart-panel";
 import { PendingNotice } from "@/components/ui/pending-notice";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  buildReceiptDraftFromCart,
+  compareCartItemKey,
+  loadCompareCart,
+  saveCompareCart,
+  saveCompareCartReceiptDraft,
+  type CompareCartItem,
+} from "@/lib/compare-cart";
 import { formatDate, formatMoney, formatUnitPrice } from "@/lib/format";
 import type { CompareRow, Product, SpendlyUnit, Store } from "@/lib/types";
 
@@ -175,11 +185,90 @@ export function CompareForm({
   compared = false,
   rows,
 }: CompareFormProps) {
+  const router = useRouter();
   const [productId, setProductId] = useState(initialProductId);
   const [storeAId, setStoreAId] = useState(initialStoreAId);
   const [storeBId, setStoreBId] = useState(initialStoreBId);
   const [formError, setFormError] = useState<string | null>(null);
+  const [cartItems, setCartItems] = useState<CompareCartItem[]>(() =>
+    loadCompareCart(),
+  );
   const [isPending, startTransition] = useTransition();
+
+  function addToCart(row: CompareRow) {
+    if (
+      !productId ||
+      !selectedProduct ||
+      row.normalized_unit_price === null ||
+      row.normalized_unit === null
+    ) {
+      return;
+    }
+
+    const key = compareCartItemKey(productId, row.store_id);
+
+    setCartItems((current) => {
+      const existing = current.find(
+        (item) => compareCartItemKey(item.productId, item.storeId) === key,
+      );
+
+      const next = existing
+        ? current.map((item) =>
+            compareCartItemKey(item.productId, item.storeId) === key
+              ? { ...item, quantity: item.quantity + 1 }
+              : item,
+          )
+        : [
+            ...current,
+            {
+              productId,
+              productName: selectedProduct.name,
+              storeId: row.store_id,
+              storeName: row.store_name,
+              quantity: 1,
+              unit: row.normalized_unit!,
+              normalizedUnitPrice: row.normalized_unit_price!,
+            },
+          ];
+
+      saveCompareCart(next);
+      return next;
+    });
+  }
+
+  function updateCartQuantity(key: string, quantity: number) {
+    setCartItems((current) => {
+      const next = current.map((item) =>
+        compareCartItemKey(item.productId, item.storeId) === key
+          ? { ...item, quantity }
+          : item,
+      );
+      saveCompareCart(next);
+      return next;
+    });
+  }
+
+  function removeCartItem(key: string) {
+    setCartItems((current) => {
+      const next = current.filter(
+        (item) => compareCartItemKey(item.productId, item.storeId) !== key,
+      );
+      saveCompareCart(next);
+      return next;
+    });
+  }
+
+  function handleCreateReceipt() {
+    const draft = buildReceiptDraftFromCart(cartItems);
+    if (!draft) {
+      return;
+    }
+
+    saveCompareCartReceiptDraft(draft);
+    saveCompareCart([]);
+    setCartItems([]);
+    router.push("/receipts/new?from=compare");
+  }
 
   const selectedProduct = products.find((product) => product.id === productId);
   const outcome = useMemo(() => {
@@ -195,9 +284,14 @@ export function CompareForm({
   }, [compared, rows, storeAId, storeBId]);
 
   const showResults = compared && rows.length > 0;
+  const showCart = cartItems.length > 0;
 
   return (
-    <div className="space-y-6" aria-busy={isPending}>
+    <div
+      className={`space-y-6 ${showCart ? "lg:flex lg:items-start lg:gap-6 lg:space-y-0" : ""}`}
+      aria-busy={isPending}
+    >
+      <div className={`space-y-6 ${showCart ? "min-w-0 flex-1" : ""}`}>
       <PendingNotice show={isPending} message="Comparing prices..." />
       {!compared ? (
         <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-700">
@@ -341,7 +435,7 @@ export function CompareForm({
               return (
                 <article
                   key={row.store_id}
-                  className={`rounded-lg border p-5 ${
+                  className={`flex flex-col rounded-lg border p-5 ${
                     isWinner
                       ? "border-emerald-400 bg-emerald-50/60"
                       : "border-slate-300 bg-white"
@@ -395,6 +489,15 @@ export function CompareForm({
                           View source receipt
                         </Link>
                       ) : null}
+                      <div className="mt-auto flex justify-end pt-4">
+                        <button
+                          type="button"
+                          onClick={() => addToCart(row)}
+                          className="inline-flex h-9 items-center justify-center rounded-lg border border-emerald-300 px-3 text-sm font-medium text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-sm"
+                        >
+                          Add to Cart
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -430,6 +533,25 @@ export function CompareForm({
             </Link>
           ) : null}
         </>
+      ) : null}
+
+      {showCart ? (
+        <button
+          type="button"
+          onClick={handleCreateReceipt}
+          className="inline-flex h-12 items-center justify-center rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:bg-emerald-600"
+        >
+          Create Receipt
+        </button>
+      ) : null}
+      </div>
+
+      {showCart ? (
+        <CompareCartPanel
+          items={cartItems}
+          onUpdateQuantity={updateCartQuantity}
+          onRemove={removeCartItem}
+        />
       ) : null}
     </div>
   );

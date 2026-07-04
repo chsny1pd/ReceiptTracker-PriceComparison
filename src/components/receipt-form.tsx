@@ -12,6 +12,7 @@ import { FormErrorSummary } from "@/components/form-error-summary";
 import { Modal } from "@/components/ui/modal";
 import { PendingNotice } from "@/components/ui/pending-notice";
 import { Spinner } from "@/components/ui/spinner";
+import { consumeCompareCartReceiptDraft } from "@/lib/compare-cart";
 import { formatMoney, formatUnitPrice } from "@/lib/format";
 import type { Product, SpendlyUnit, Store } from "@/lib/types";
 import {
@@ -20,8 +21,8 @@ import {
   unitCategoryForUnit,
 } from "@/lib/units";
 
-const ADD_STORE_VALUE = "__add_store__";
-const ADD_PRODUCT_VALUE = "__add_product__";
+const secondaryActionButtonClassName =
+  "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-emerald-300 px-3 text-sm font-medium text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50";
 
 type DraftLine = {
   key: string;
@@ -49,8 +50,31 @@ function emptyLine(products: Product[]): DraftLine {
   };
 }
 
+const RECEIPT_TAX_RATE = 0.07;
+
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function splitTaxInclusiveTotal(grossTotal: number) {
+  const roundedGross = roundMoney(grossTotal);
+  const subtotal = roundMoney(roundedGross / (1 + RECEIPT_TAX_RATE));
+  const tax = roundMoney(roundedGross - subtotal);
+
+  return { subtotal, tax, total: roundedGross };
+}
+
+function draftLineToState(
+  draft: NonNullable<ReturnType<typeof consumeCompareCartReceiptDraft>>,
+): DraftLine[] {
+  return draft.lines.map((line) => ({
+    key: crypto.randomUUID(),
+    productId: line.productId,
+    rawName: line.rawName,
+    quantity: line.quantity,
+    unit: line.unit,
+    lineTotal: line.lineTotal,
+  }));
 }
 
 export function ReceiptForm({ stores, products }: ReceiptFormProps) {
@@ -59,18 +83,24 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
   const [isAddingStore, startAddStoreTransition] = useTransition();
   const [isAddingProduct, startAddProductTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [storeId, setStoreId] = useState(stores[0]?.id ?? "");
+  const [storeId, setStoreId] = useState(
+    () => consumeCompareCartReceiptDraft()?.storeId ?? stores[0]?.id ?? "",
+  );
   const [purchasedAt, setPurchasedAt] = useState(
     new Date().toISOString().slice(0, 10),
   );
-  const [tax, setTax] = useState("0");
   const [notes, setNotes] = useState("");
   const [imageObjectKey, setImageObjectKey] = useState<string | null>(null);
   const [imageName, setImageName] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [lines, setLines] = useState<DraftLine[]>(() =>
-    products.length > 0 ? [emptyLine(products)] : [],
-  );
+  const [lines, setLines] = useState<DraftLine[]>(() => {
+    const draft = consumeCompareCartReceiptDraft();
+    if (draft) {
+      return draftLineToState(draft);
+    }
+
+    return products.length > 0 ? [emptyLine(products)] : [];
+  });
   const [storeModalOpen, setStoreModalOpen] = useState(false);
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [productModalLineKey, setProductModalLineKey] = useState<string | null>(
@@ -87,7 +117,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     [products],
   );
 
-  const computedSubtotal = useMemo(
+  const computedGrossTotal = useMemo(
     () =>
       roundMoney(
         lines.reduce((sum, line) => sum + (Number(line.lineTotal) || 0), 0),
@@ -95,10 +125,11 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     [lines],
   );
 
-  const computedTotal = useMemo(
-    () => roundMoney(computedSubtotal + (Number(tax) || 0)),
-    [computedSubtotal, tax],
-  );
+  const { subtotal: computedSubtotal, tax: computedTax, total: computedTotal } =
+    useMemo(
+      () => splitTaxInclusiveTotal(computedGrossTotal),
+      [computedGrossTotal],
+    );
 
   const isBusy =
     isPending || isAddingStore || isAddingProduct || uploadingImage;
@@ -110,21 +141,10 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
   }
 
   function handleStoreSelect(value: string) {
-    if (value === ADD_STORE_VALUE) {
-      setStoreModalOpen(true);
-      return;
-    }
-
     setStoreId(value);
   }
 
   function handleProductSelect(lineKey: string, productId: string) {
-    if (productId === ADD_PRODUCT_VALUE) {
-      setProductModalLineKey(lineKey);
-      setProductModalOpen(true);
-      return;
-    }
-
     const product = productMap.get(productId);
     updateLine(lineKey, {
       productId,
@@ -280,7 +300,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
         storeId,
         purchasedAt,
         subtotal: computedSubtotal,
-        tax: Number(tax) || 0,
+        tax: computedTax,
         total: computedTotal,
         notes,
         imageObjectKey: imageObjectKey ?? undefined,
@@ -313,7 +333,16 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
           <h2 className="text-lg font-semibold">Receipt details</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <label className="grid gap-2 text-sm">
-              <span className="font-medium">Store</span>
+              <span className="flex items-center justify-between gap-3">
+                <span className="font-medium">Store</span>
+                <button
+                  type="button"
+                  onClick={() => setStoreModalOpen(true)}
+                  className={secondaryActionButtonClassName}
+                >
+                  Add store
+                </button>
+              </span>
               <select
                 value={storeId || ""}
                 onChange={(event) => handleStoreSelect(event.target.value)}
@@ -328,7 +357,6 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                     {store.name}
                   </option>
                 ))}
-                <option value={ADD_STORE_VALUE}>+ Add store</option>
               </select>
             </label>
             <label className="grid gap-2 text-sm">
@@ -347,27 +375,26 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                 {formatMoney(computedSubtotal)}
               </p>
               <p className="text-xs text-slate-500">
-                Calculated from line item totals.
+                Pre-tax amount extracted from line totals (VAT inclusive).
               </p>
             </div>
-            <label className="grid gap-2 text-sm">
-              <span className="font-medium">Tax</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={tax}
-                onChange={(event) => setTax(event.target.value)}
-                required
-                className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
-              />
-            </label>
+            <div className="grid gap-2 text-sm">
+              <span className="font-medium">Tax (7%)</span>
+              <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums text-slate-700">
+                {formatMoney(computedTax)}
+              </p>
+              <p className="text-xs text-slate-500">
+                VAT portion of line totals.
+              </p>
+            </div>
             <div className="grid gap-2 text-sm">
               <span className="font-medium">Total</span>
               <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums font-semibold text-slate-900">
                 {formatMoney(computedTotal)}
               </p>
-              <p className="text-xs text-slate-500">Subtotal + tax.</p>
+              <p className="text-xs text-slate-500">
+                Sum of line totals (subtotal + tax).
+              </p>
             </div>
             <label className="grid gap-2 text-sm md:col-span-2">
               <span className="font-medium">Notes</span>
@@ -412,7 +439,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
               onClick={() =>
                 setLines((current) => [...current, emptyLine(products)])
               }
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium transition hover:border-slate-400 hover:bg-slate-50"
+              className={secondaryActionButtonClassName}
             >
               Add item
             </button>
@@ -421,9 +448,8 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
           {lines.length === 0 ? (
             <div className="mt-4 rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center">
               <p className="text-sm text-slate-600">
-                No line items yet. Add an item, then choose{" "}
-                <strong>+ Add product</strong> from the product dropdown if
-                needed.
+                No line items yet. Add an item, then use{" "}
+                <strong>Add product</strong> if you need a new product.
               </p>
               <button
                 type="button"
@@ -471,7 +497,19 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="grid gap-2 text-sm">
-                      <span className="font-medium">Product</span>
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="font-medium">Product</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProductModalLineKey(line.key);
+                            setProductModalOpen(true);
+                          }}
+                          className={secondaryActionButtonClassName}
+                        >
+                          Add product
+                        </button>
+                      </span>
                       <select
                         value={line.productId || ""}
                         onChange={(event) =>
@@ -488,7 +526,6 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                             {entry.name}
                           </option>
                         ))}
-                        <option value={ADD_PRODUCT_VALUE}>+ Add product</option>
                       </select>
                     </label>
                     <label className="grid gap-2 text-sm">
@@ -548,6 +585,9 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                         required
                         className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
                       />
+                      <p className="text-xs text-slate-500">
+                        Includes 7% VAT.
+                      </p>
                     </label>
                     <div className="grid gap-2 text-sm">
                       <span className="font-medium">Normalized preview</span>
