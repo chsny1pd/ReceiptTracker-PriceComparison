@@ -6,6 +6,22 @@ Spendly is a full-stack web app for a school project. It helps users manually lo
 
 Spendly is not a public price crawler. Every price shown in the app comes from user-entered receipt data.
 
+### 1.1 System Context Diagram
+
+```mermaid
+flowchart LR
+  user["User browser"] --> app["Next.js App Router"]
+  app --> auth["Supabase Auth<br/>GitHub OAuth"]
+  app --> db["Supabase Postgres<br/>RLS + RPC functions"]
+  app --> r2["Cloudflare R2<br/>receipt image objects"]
+  app --> vercel["Vercel deployment"]
+  auth --> profile["profiles row"]
+  db --> price["Unit-normalized prices"]
+  db --> history["Receipt-derived history"]
+  db --> balances["Netted balances"]
+  r2 --> key["image_object_key only in Postgres"]
+```
+
 ## 2. Success Criteria
 
 Spendly is successful when a grader can:
@@ -74,6 +90,29 @@ Server behavior:
 - `src/lib/supabase/middleware.ts` refreshes auth session.
 - `middleware.ts` applies session middleware broadly.
 
+Auth flow diagram:
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant Login as "/login"
+  participant SignIn as "/auth/sign-in"
+  participant Supabase as "Supabase Auth"
+  participant GitHub as "GitHub OAuth"
+  participant Callback as "/auth/callback"
+  participant DB as "Postgres profiles"
+  participant Dashboard as "/dashboard"
+
+  User->>Login: Click "Continue with GitHub"
+  Login->>SignIn: Navigate
+  SignIn->>Supabase: signInWithOAuth(provider: github)
+  Supabase->>GitHub: Redirect for consent
+  GitHub->>Callback: Return OAuth code
+  Callback->>Supabase: exchangeCodeForSession(code)
+  Supabase->>DB: handle_new_user trigger upserts profile
+  Callback->>Dashboard: Redirect authenticated user
+```
+
 ### 5.3 Auth Requirements
 
 - Only authenticated users can access private app data.
@@ -100,6 +139,83 @@ The schema contains:
 - Triggers.
 - RLS policies.
 - Helper functions for normalization, split creation, price comparison, price history, settlement, and balances.
+
+### 6.1 Database ERD
+
+```mermaid
+erDiagram
+  AUTH_USERS ||--|| PROFILES : "mirrored by"
+  PROFILES ||--o{ STORES : "owns"
+  PROFILES ||--o{ PRODUCTS : "owns"
+  PROFILES ||--o{ RECEIPTS : "owns"
+  STORES ||--o{ RECEIPTS : "appears on"
+  RECEIPTS ||--o{ RECEIPT_ITEMS : "has"
+  PRODUCTS ||--o{ RECEIPT_ITEMS : "normalizes"
+  RECEIPTS ||--o{ EXPENSE_SPLITS : "split as receipt"
+  RECEIPT_ITEMS ||--o{ EXPENSE_SPLITS : "split as item"
+  PROFILES ||--o{ EXPENSE_SPLITS : "creates_or_pays"
+  EXPENSE_SPLITS ||--o{ EXPENSE_SPLIT_SHARES : "has debts"
+  PROFILES ||--o{ EXPENSE_SPLIT_SHARES : "owes payer"
+
+  PROFILES {
+    uuid id PK
+    text github_username
+    text display_name
+    text avatar_url
+  }
+
+  STORES {
+    uuid id PK
+    uuid owner_user_id FK
+    citext name
+    text location
+  }
+
+  PRODUCTS {
+    uuid id PK
+    uuid owner_user_id FK
+    citext name
+    enum unit_category
+    enum default_unit
+  }
+
+  RECEIPTS {
+    uuid id PK
+    uuid owner_user_id FK
+    uuid store_id FK
+    date purchased_at
+    numeric total
+    text image_object_key
+  }
+
+  RECEIPT_ITEMS {
+    uuid id PK
+    uuid receipt_id FK
+    uuid product_id FK
+    numeric quantity
+    enum unit
+    numeric normalized_quantity
+    enum normalized_unit
+    numeric normalized_unit_price
+  }
+
+  EXPENSE_SPLITS {
+    uuid id PK
+    uuid receipt_id FK
+    uuid receipt_item_id FK
+    uuid payer_user_id FK
+    enum split_method
+    numeric total_amount
+  }
+
+  EXPENSE_SPLIT_SHARES {
+    uuid id PK
+    uuid split_id FK
+    uuid participant_user_id FK
+    numeric owed_amount
+    timestamptz settled_at
+  }
+```
 
 ## 7. Core Tables
 
@@ -224,6 +340,20 @@ Formula:
 normalized_unit_price = round(line_total / normalized_quantity, 4)
 ```
 
+Receipt item normalization flow:
+
+```mermaid
+flowchart TD
+  start["User enters receipt item"] --> product["Find selected product"]
+  product --> category{"Unit matches product category?"}
+  category -- "No" --> reject["Reject insert/update<br/>constraint error"]
+  category -- "Yes" --> normalize["Normalize quantity<br/>g to kg, ml to l, each to each"]
+  normalize --> price["Compute normalized_unit_price<br/>line_total / normalized_quantity"]
+  price --> save["Save receipt_items row"]
+  save --> compare["Available for comparison"]
+  save --> history["Available for history"]
+```
+
 ### 7.6 `expense_splits`
 
 Purpose: one split event for a receipt or one receipt item.
@@ -324,6 +454,25 @@ Rules:
 - Share participant, payer, or creator may mark settled.
 - Sets `settled_at` and `settled_by_user_id`.
 
+Split creation and balance derivation:
+
+```mermaid
+flowchart TD
+  splitStart["Receipt owner creates split"] --> target{"Split target"}
+  target -- "Whole receipt" --> receiptTotal["Use receipts.total"]
+  target -- "One item" --> itemTotal["Use receipt_items.line_total"]
+  receiptTotal --> method{"Split method"}
+  itemTotal --> method
+  method -- "Even" --> even["Divide total by payer + non-payers"]
+  method -- "Custom" --> custom["Validate custom shares + payer share = total"]
+  even --> shares["Insert expense_split_shares<br/>non-payers only"]
+  custom --> shares
+  shares --> noPayer["No payer share row"]
+  noPayer --> balances["get_current_balances()"]
+  balances --> net["Net A owes B vs B owes A"]
+  net --> output["Return one direction per pair<br/>omit zero-net pairs"]
+```
+
 ### 8.5 Price Comparison
 
 `get_latest_product_price(p_product_id, p_store_id, p_normalized_unit)`
@@ -338,11 +487,37 @@ Rules:
 - Returns latest price rows for store A and store B.
 - API/UI should calculate winner from `normalized_unit_price`.
 
+Price comparison flow:
+
+```mermaid
+flowchart LR
+  input["Product + Store A + Store B"] --> filterA["Filter receipt_items<br/>product + Store A + unit"]
+  input --> filterB["Filter receipt_items<br/>product + Store B + unit"]
+  filterA --> latestA["Latest A<br/>purchased_at desc<br/>created_at desc<br/>line_number asc"]
+  filterB --> latestB["Latest B<br/>purchased_at desc<br/>created_at desc<br/>line_number asc"]
+  latestA --> result["Compare normalized_unit_price"]
+  latestB --> result
+  result --> ui["Show cheaper store, price per unit,<br/>date, source receipt"]
+```
+
 ### 8.6 Price History
 
 `get_product_price_history(p_product_id, p_normalized_unit)`
 - Returns receipt item price series sorted by purchase date.
 - Only receipt-derived data is allowed.
+
+History data flow:
+
+```mermaid
+flowchart TD
+  receipts["User-entered receipts"] --> items["receipt_items"]
+  items --> normalized["normalized_unit_price"]
+  normalized --> rpc["get_product_price_history"]
+  rpc --> chart["Line chart"]
+  rpc --> table["Accessible data table"]
+  chart --> insight["Trend over time"]
+  table --> insight
+```
 
 ### 8.7 Balances
 
@@ -425,6 +600,28 @@ Response:
   "objectKey": "receipts/<user-id>/<uuid>.jpg",
   "uploadUrl": "https://..."
 }
+```
+
+R2 upload flow:
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant Browser
+  participant Presign as "POST /api/receipt-images/presign"
+  participant Supabase as "Supabase Auth"
+  participant R2 as "Cloudflare R2"
+  participant DB as "Postgres receipts"
+
+  User->>Browser: Select receipt image
+  Browser->>Presign: contentType + fileSize
+  Presign->>Supabase: getUser()
+  Supabase-->>Presign: authenticated user
+  Presign->>R2: Create presigned PUT URL
+  Presign-->>Browser: objectKey + uploadUrl
+  Browser->>R2: PUT image binary
+  Browser->>DB: Save receipt with image_object_key
+  Note over DB: Binary image never stored in Postgres
 ```
 
 ### 11.2 `GET /api/receipt-images/[receiptId]`
@@ -528,6 +725,20 @@ Prefer calling DB RPCs:
 
 No `net_balances` table.
 
+API and RPC responsibility map:
+
+```mermaid
+flowchart TB
+  ui["Next.js pages/forms"] --> routes["Route handlers or server actions"]
+  routes --> authCheck["Check Supabase user"]
+  authCheck --> dbRpc["Postgres RPC/functions"]
+  authCheck --> r2Routes["R2 presign/view routes"]
+  dbRpc --> tables["RLS-protected tables"]
+  r2Routes --> r2Objects["Cloudflare R2 objects"]
+  tables --> ui
+  r2Objects --> ui
+```
+
 ## 12. UX Requirements
 
 General:
@@ -599,6 +810,23 @@ Charts:
 - Store comparison: two-column bar or side-by-side metric cards.
 - Balances: list/table, not chart.
 
+Primary screen map:
+
+```mermaid
+flowchart LR
+  landing["/"] --> login["/login"]
+  login --> signin["/auth/sign-in"]
+  signin --> callback["/auth/callback"]
+  callback --> dashboard["/dashboard"]
+  dashboard --> newReceipt["/receipts/new"]
+  dashboard --> compare["/compare"]
+  dashboard --> balances["/balances"]
+  newReceipt --> receiptDetail["/receipts/[id]"]
+  receiptDetail --> splitDetail["/splits/[id]"]
+  receiptDetail --> history["/products/[id]/history"]
+  compare --> history
+```
+
 ## 14. Environment Variables
 
 Public:
@@ -654,3 +882,19 @@ When another AI continues this project:
 7. Let the database enforce unit normalization and split invariants.
 8. Run `npm run lint` and `npm run build` before final response.
 
+Implementation build order:
+
+```mermaid
+flowchart TD
+  setup["Live Supabase + R2 setup"] --> auth["Auth demo"]
+  auth --> receipts["Receipt CRUD"]
+  receipts --> upload["R2 image upload UI"]
+  receipts --> compare["Price comparison"]
+  receipts --> history["Product history"]
+  receipts --> splits["Receipt/item splits"]
+  splits --> balances["Netted balances"]
+  compare --> polish["Demo polish + CI"]
+  history --> polish
+  upload --> polish
+  balances --> polish
+```
