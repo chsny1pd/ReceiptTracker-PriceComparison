@@ -11,24 +11,32 @@ type ModalProps = {
 
 export function Modal({ open, onClose, title, children }: ModalProps) {
   const titleId = useId();
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    closeButtonRef.current?.focus();
+    const focusTarget = dialogRef.current?.querySelector<HTMLElement>(
+      "input, select, textarea",
+    );
+    focusTarget?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        onClose();
+        onCloseRef.current();
       }
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) {
     return null;
@@ -43,6 +51,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -53,7 +62,6 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             {title}
           </h3>
           <button
-            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"

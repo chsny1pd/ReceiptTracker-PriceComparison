@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { AddProductModal } from "@/components/add-product-modal";
 import { CompareCartPanel } from "@/components/compare/compare-cart-panel";
 import {
   buildBrandCompareRow,
@@ -96,6 +97,7 @@ export function CompareForm({ products }: CompareFormProps) {
   ]);
   const [compared, setCompared] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [productModalOpen, setProductModalOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CompareCartItem[]>(() =>
     loadCompareCart(),
   );
@@ -268,19 +270,26 @@ export function CompareForm({ products }: CompareFormProps) {
 
         {products.length === 0 ? (
           <div className="rounded-lg border border-slate-300 bg-white px-4 py-4 text-sm text-slate-700">
-            <p className="font-medium text-slate-900">Setup needed</p>
+            <p className="font-medium text-slate-900">No products yet</p>
             <p className="mt-1">
-              Add a receipt with line items to create products first.
+              Add a product to start comparing shelf prices across brands.
             </p>
-            <Link
-              href="/receipts/new"
-              className="mt-3 inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            {formError ? (
+              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {formError}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setProductModalOpen(true)}
+              className={`mt-3 ${secondaryActionButtonClassName}`}
             >
-              Log a receipt
-            </Link>
+              Add product
+            </button>
           </div>
         ) : null}
 
+        {products.length > 0 ? (
         <form onSubmit={handleCompare} className="space-y-8">
           {formError ? (
             <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -292,7 +301,16 @@ export function CompareForm({ products }: CompareFormProps) {
             <h2 className="text-lg font-semibold">Compare details</h2>
             <div className="mt-4">
               <label className="grid gap-2 text-sm">
-                <span className="font-medium">Product</span>
+                <span className="flex items-center justify-between gap-3">
+                  <span className="font-medium">Product</span>
+                  <button
+                    type="button"
+                    onClick={() => setProductModalOpen(true)}
+                    className={secondaryActionButtonClassName}
+                  >
+                    Add product
+                  </button>
+                </span>
                 <select
                   value={productId}
                   onChange={(event) => handleProductChange(event.target.value)}
@@ -507,15 +525,16 @@ export function CompareForm({ products }: CompareFormProps) {
             </button>
           </section>
         </form>
+        ) : null}
 
-        {compared && outcome.kind === "winner" ? (
+        {products.length > 0 && compared && outcome.kind === "winner" ? (
           <p className="text-sm text-slate-600">
             Largest gap: {formatMoney(outcome.savings)} per {outcome.unit}{" "}
             between the cheapest and most expensive brand.
           </p>
         ) : null}
 
-        {compared && productId ? (
+        {products.length > 0 && compared && productId ? (
           <Link
             href={`/products/${productId}/history`}
             className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
@@ -533,6 +552,17 @@ export function CompareForm({ products }: CompareFormProps) {
           onCreateReceipt={handleCreateReceipt}
         />
       ) : null}
+
+      <AddProductModal
+        open={productModalOpen}
+        onClose={() => setProductModalOpen(false)}
+        onSuccess={(product) => {
+          setProductId(product.id);
+          handleProductChange(product.id);
+          router.refresh();
+        }}
+        onError={(message) => setFormError(message || null)}
+      />
     </div>
   );
 }

@@ -3,11 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { createProduct, createStore } from "@/app/actions/catalog";
+import { createStore } from "@/app/actions/catalog";
 import {
   createReceipt,
   type ReceiptLineInput,
 } from "@/app/actions/receipts";
+import { AddProductModal } from "@/components/add-product-modal";
 import { FormErrorSummary } from "@/components/form-error-summary";
 import { Modal } from "@/components/ui/modal";
 import { PendingNotice } from "@/components/ui/pending-notice";
@@ -81,7 +82,6 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isAddingStore, startAddStoreTransition] = useTransition();
-  const [isAddingProduct, startAddProductTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [storeId, setStoreId] = useState(() => stores[0]?.id ?? "");
   const [purchasedAt, setPurchasedAt] = useState(
@@ -105,10 +105,6 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     null,
   );
   const [newStoreName, setNewStoreName] = useState("");
-  const [newProductName, setNewProductName] = useState("");
-  const [newProductCategory, setNewProductCategory] = useState<
-    "mass" | "volume" | "each"
-  >("mass");
 
   const productMap = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
@@ -129,8 +125,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
       [computedGrossTotal],
     );
 
-  const isBusy =
-    isPending || isAddingStore || isAddingProduct || uploadingImage;
+  const isBusy = isPending || isAddingStore || uploadingImage;
 
   function updateLine(key: string, patch: Partial<DraftLine>) {
     setLines((current) =>
@@ -172,45 +167,28 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     });
   }
 
-  function handleAddProduct() {
-    setError(null);
-    const formData = new FormData();
-    formData.set("name", newProductName);
-    formData.set("unitCategory", newProductCategory);
+  function handleProductCreated(product: Product) {
+    const lineKey = productModalLineKey;
+    if (lineKey) {
+      updateLine(lineKey, {
+        productId: product.id,
+        unit: product.default_unit,
+      });
+    } else if (lines.length === 0) {
+      setLines([
+        {
+          key: crypto.randomUUID(),
+          productId: product.id,
+          rawName: "",
+          quantity: "1",
+          unit: product.default_unit,
+          lineTotal: "0",
+        },
+      ]);
+    }
 
-    startAddProductTransition(async () => {
-      const result = await createProduct(formData);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-
-      if (result.data) {
-        const lineKey = productModalLineKey;
-        if (lineKey) {
-          updateLine(lineKey, {
-            productId: result.data.id,
-            unit: result.data.default_unit,
-          });
-        } else if (lines.length === 0) {
-          setLines([
-            {
-              key: crypto.randomUUID(),
-              productId: result.data.id,
-              rawName: "",
-              quantity: "1",
-              unit: result.data.default_unit,
-              lineTotal: "0",
-            },
-          ]);
-        }
-      }
-
-      setNewProductName("");
-      setProductModalOpen(false);
-      setProductModalLineKey(null);
-      router.refresh();
-    });
+    setProductModalLineKey(null);
+    router.refresh();
   }
 
   async function handleImageChange(file: File | null) {
@@ -314,8 +292,6 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     pendingMessage = "Uploading receipt image...";
   } else if (isAddingStore) {
     pendingMessage = "Adding store...";
-  } else if (isAddingProduct) {
-    pendingMessage = "Adding product...";
   }
 
   return (
@@ -666,61 +642,15 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
         </div>
       </Modal>
 
-      <Modal
+      <AddProductModal
         open={productModalOpen}
         onClose={() => {
-          if (!isAddingProduct) {
-            setProductModalOpen(false);
-            setNewProductName("");
-            setProductModalLineKey(null);
-          }
+          setProductModalOpen(false);
+          setProductModalLineKey(null);
         }}
-        title="Add product"
-      >
-        <div className="space-y-4">
-          <label className="grid gap-2 text-sm">
-            <span className="font-medium">Product name</span>
-            <input
-              value={newProductName}
-              onChange={(event) => setNewProductName(event.target.value)}
-              placeholder="e.g. Milk"
-              autoFocus
-              className="h-11 rounded-lg border border-slate-300 px-3"
-            />
-          </label>
-          <label className="grid gap-2 text-sm">
-            <span className="font-medium">Unit category</span>
-            <select
-              value={newProductCategory}
-              onChange={(event) =>
-                setNewProductCategory(
-                  event.target.value as "mass" | "volume" | "each",
-                )
-              }
-              className="h-11 rounded-lg border border-slate-300 px-3"
-            >
-              <option value="mass">Mass (g/kg)</option>
-              <option value="volume">Volume (ml/l)</option>
-              <option value="each">Each</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            disabled={isAddingProduct || !newProductName.trim()}
-            onClick={handleAddProduct}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isAddingProduct ? (
-              <>
-                <Spinner size="sm" className="border-white/30 border-t-white" />
-                Adding product...
-              </>
-            ) : (
-              "Add product"
-            )}
-          </button>
-        </div>
-      </Modal>
+        onSuccess={handleProductCreated}
+        onError={(message) => setError(message || null)}
+      />
     </>
   );
 }

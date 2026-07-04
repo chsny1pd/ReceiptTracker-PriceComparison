@@ -37,10 +37,14 @@ create table public.products (
   name citext not null,
   unit_category public.spendly_unit_category not null,
   default_unit public.spendly_unit not null,
+  image_object_key text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint products_name_not_blank check (length(btrim(name::text)) > 0),
   constraint products_owner_name_unique unique (owner_user_id, name),
+  constraint products_image_key_not_blank check (
+    image_object_key is null or length(btrim(image_object_key)) > 0
+  ),
   constraint products_default_unit_matches_category check (
     (unit_category = 'mass' and default_unit = 'kg') or
     (unit_category = 'volume' and default_unit = 'l') or

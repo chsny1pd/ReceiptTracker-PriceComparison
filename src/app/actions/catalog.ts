@@ -39,6 +39,7 @@ export async function createProduct(formData: FormData) {
   const unitCategory = String(
     formData.get("unitCategory") ?? "",
   ) as SpendlyUnitCategory;
+  const imageObjectKey = String(formData.get("imageObjectKey") ?? "").trim();
 
   if (!name) {
     return { error: "Product name is required." };
@@ -55,6 +56,7 @@ export async function createProduct(formData: FormData) {
       name,
       unit_category: unitCategory,
       default_unit: DEFAULT_UNIT_BY_CATEGORY[unitCategory],
+      image_object_key: imageObjectKey || null,
     })
     .select("id, name, unit_category, default_unit")
     .single();
@@ -64,5 +66,6 @@ export async function createProduct(formData: FormData) {
   }
 
   revalidatePath("/receipts/new");
+  revalidatePath("/compare");
   return { data };
 }
