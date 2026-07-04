@@ -2,13 +2,20 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
+import { PaymentProofPanel } from "@/components/splits/payment-proof-panel";
 import {
   formatSettledAt,
   SettleShareButton,
 } from "@/components/splits/settle-share-button";
 import { getRequiredUser } from "@/lib/auth";
 import { formatDate, formatMoney } from "@/lib/format";
-import type { ProfileOption, SplitDetail, SplitShareDetail } from "@/lib/types";
+import type {
+  ProfileOption,
+  SharePaymentProof,
+  SplitDetail,
+  SplitShareDetail,
+  UserPaymentMethod,
+} from "@/lib/types";
 
 type SplitDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -29,7 +36,7 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
   const { data: split, error } = await supabase
     .from("expense_splits")
     .select(
-      "id, receipt_id, receipt_item_id, split_method, total_amount, created_at, payer_user_id",
+      "id, receipt_id, receipt_item_id, split_method, total_amount, created_at, payer_user_id, receiver_payment_method_id",
     )
     .eq("id", id)
     .single();
@@ -40,7 +47,9 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
 
   const { data: shares, error: sharesError } = await supabase
     .from("expense_split_shares")
-    .select("id, participant_user_id, owed_amount, settled_at")
+    .select(
+      "id, participant_user_id, owed_amount, settled_at, share_status, latest_payment_proof_id",
+    )
     .eq("split_id", split.id)
     .order("created_at");
 
@@ -53,10 +62,29 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
     ...(shares ?? []).map((share) => share.participant_user_id),
   ];
 
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, display_name, github_username")
-    .in("id", profileIds);
+  const [{ data: profiles }, { data: paymentMethod }, { data: rawProofs }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, display_name, github_username")
+        .in("id", profileIds),
+      split.receiver_payment_method_id
+        ? supabase
+            .from("user_payment_methods")
+            .select(
+              "id, label, provider_name, account_name, account_reference, promptpay_id, qr_image_object_key, note, is_default",
+            )
+            .eq("id", split.receiver_payment_method_id)
+            .single()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("share_payment_proofs")
+        .select(
+          "id, share_id, uploader_user_id, receiver_user_id, image_object_key, note, review_status, reviewed_at, created_at",
+        )
+        .in("share_id", (shares ?? []).map((share) => share.id))
+        .order("created_at", { ascending: false }),
+    ]);
 
   const profileMap = new Map(
     ((profiles ?? []) as ProfileOption[]).map((profile) => [profile.id, profile]),
@@ -70,6 +98,8 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
       participant_user_id: share.participant_user_id,
       owed_amount: Number(share.owed_amount),
       settled_at: share.settled_at,
+      share_status: share.share_status,
+      latest_payment_proof_id: share.latest_payment_proof_id,
       participant_display_name: participant?.display_name ?? null,
       participant_github_username: participant?.github_username ?? null,
     };
@@ -102,6 +132,13 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
   }
 
   const canManage = split.payer_user_id === user.id;
+  const proofsByShare = new Map<string, SharePaymentProof[]>();
+
+  for (const proof of (rawProofs ?? []) as SharePaymentProof[]) {
+    const existing = proofsByShare.get(proof.share_id) ?? [];
+    existing.push(proof);
+    proofsByShare.set(proof.share_id, existing);
+  }
 
   return (
     <>
@@ -112,10 +149,10 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
         backLabel="Back to receipt"
         action={
           <Link
-            href="/balances"
+            href="/splits"
             className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-300 px-5 text-sm font-semibold"
           >
-            View balances
+            Open split hub
           </Link>
         }
       />
@@ -170,7 +207,8 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
             <li>The payer never gets an `expense_split_shares` row.</li>
             <li>Only listed participants owe the payer.</li>
-            <li>Unsettled shares appear in netted balances.</li>
+            <li>Unpaid, submitted, and rejected shares still affect netted balances.</li>
+            <li>Only the receiver can confirm or reject payment proof.</li>
           </ul>
         </section>
       </div>
@@ -203,16 +241,28 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
                   {formatMoney(share.owed_amount)}
                 </td>
                 <td className="px-4 py-3">
-                  {share.settled_at ? (
-                    <span className="text-emerald-700">
-                      {formatSettledAt(share.settled_at)}
-                    </span>
-                  ) : (
-                    <span className="text-amber-700">Unsettled</span>
-                  )}
+                  <span
+                    className={
+                      share.share_status === "confirmed"
+                        ? "text-emerald-700"
+                        : share.share_status === "submitted"
+                          ? "text-sky-700"
+                          : share.share_status === "rejected"
+                            ? "text-red-700"
+                            : "text-amber-700"
+                    }
+                  >
+                    {share.share_status === "confirmed"
+                      ? formatSettledAt(share.settled_at)
+                      : share.share_status === "submitted"
+                        ? "Payment submitted"
+                        : share.share_status === "rejected"
+                          ? "Proof rejected"
+                          : "Unpaid"}
+                  </span>
                 </td>
                 <td className="px-4 py-3">
-                  {!share.settled_at && canManage ? (
+                  {share.share_status !== "confirmed" && canManage ? (
                     <SettleShareButton shareId={share.id} splitId={split.id} />
                   ) : (
                     <span className="text-slate-400">—</span>
@@ -222,6 +272,19 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
             ))}
           </tbody>
         </table>
+      </section>
+
+      <section className="mt-6 space-y-6">
+        {splitDetail.shares.map((share) => (
+          <PaymentProofPanel
+            key={share.id}
+            splitId={split.id}
+            share={share}
+            currentUserId={user.id}
+            receiverPaymentMethod={(paymentMethod as UserPaymentMethod | null) ?? null}
+            proofs={proofsByShare.get(share.id) ?? []}
+          />
+        ))}
       </section>
     </>
   );

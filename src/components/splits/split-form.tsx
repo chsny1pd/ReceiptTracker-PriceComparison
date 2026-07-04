@@ -10,7 +10,7 @@ import { FormErrorSummary } from "@/components/form-error-summary";
 import { PendingNotice } from "@/components/ui/pending-notice";
 import { Spinner } from "@/components/ui/spinner";
 import { formatMoney } from "@/lib/format";
-import type { ProfileOption } from "@/lib/types";
+import type { ProfileOption, UserPaymentMethod } from "@/lib/types";
 
 type SplitLineItem = {
   id: string;
@@ -24,6 +24,7 @@ type SplitFormProps = {
   items: SplitLineItem[];
   profiles: ProfileOption[];
   currentUserId: string;
+  receiverPaymentMethods: UserPaymentMethod[];
 };
 
 type CustomShareRow = {
@@ -42,6 +43,7 @@ export function SplitForm({
   items,
   profiles,
   currentUserId,
+  receiverPaymentMethods,
 }: SplitFormProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +59,11 @@ export function SplitForm({
       owedAmount: "0",
     },
   ]);
+  const [receiverPaymentMethodId, setReceiverPaymentMethodId] = useState(
+    receiverPaymentMethods.find((method) => method.is_default)?.id ??
+      receiverPaymentMethods[0]?.id ??
+      "",
+  );
 
   const availableProfiles = useMemo(
     () => profiles.filter((profile) => profile.id !== currentUserId),
@@ -130,6 +137,7 @@ export function SplitForm({
           receiptId,
           receiptItemId: receiptItemTarget,
           participantUserIds: selectedParticipants,
+          receiverPaymentMethodId: receiverPaymentMethodId || null,
         });
         if (result?.error) {
           setError(result.error);
@@ -162,6 +170,7 @@ export function SplitForm({
         receiptItemId: receiptItemTarget,
         payerShareAmount,
         shares,
+        receiverPaymentMethodId: receiverPaymentMethodId || null,
       });
 
       if (result?.error) {
@@ -259,6 +268,30 @@ export function SplitForm({
             {formatMoney(targetAmount)}
           </p>
         </div>
+
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-medium">Payment receiving method</legend>
+          {receiverPaymentMethods.length > 0 ? (
+            <select
+              value={receiverPaymentMethodId}
+              onChange={(event) => setReceiverPaymentMethodId(event.target.value)}
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
+            >
+              <option value="">No saved method</option>
+              {receiverPaymentMethods.map((method) => (
+                <option key={method.id} value={method.id}>
+                  {method.label}
+                  {method.is_default ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm text-slate-600">
+              No saved payment method yet. Add one in Settings if you want participants
+              to see a QR or payment account on the split.
+            </p>
+          )}
+        </fieldset>
 
         {method === "even" ? (
           <div className="space-y-3">

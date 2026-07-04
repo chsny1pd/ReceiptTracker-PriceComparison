@@ -14,6 +14,7 @@ export async function createEvenSplit(input: {
   receiptId: string;
   receiptItemId?: string | null;
   participantUserIds: string[];
+  receiverPaymentMethodId?: string | null;
 }) {
   const { supabase } = await getRequiredUser();
 
@@ -25,6 +26,7 @@ export async function createEvenSplit(input: {
     p_receipt_id: input.receiptId,
     p_receipt_item_id: input.receiptItemId ?? null,
     p_participant_user_ids: input.participantUserIds,
+    p_receiver_payment_method_id: input.receiverPaymentMethodId ?? null,
   });
 
   if (error) {
@@ -32,7 +34,7 @@ export async function createEvenSplit(input: {
   }
 
   revalidatePath(`/receipts/${input.receiptId}`);
-  revalidatePath("/balances");
+  revalidatePath("/splits");
   redirect(`/splits/${data as string}`);
 }
 
@@ -41,6 +43,7 @@ export async function createCustomSplit(input: {
   receiptItemId?: string | null;
   payerShareAmount: number;
   shares: CustomSplitShareInput[];
+  receiverPaymentMethodId?: string | null;
 }) {
   const { supabase } = await getRequiredUser();
 
@@ -56,6 +59,7 @@ export async function createCustomSplit(input: {
       participant_user_id: share.participantUserId,
       owed_amount: share.owedAmount,
     })),
+    p_receiver_payment_method_id: input.receiverPaymentMethodId ?? null,
   });
 
   if (error) {
@@ -63,7 +67,7 @@ export async function createCustomSplit(input: {
   }
 
   revalidatePath(`/receipts/${input.receiptId}`);
-  revalidatePath("/balances");
+  revalidatePath("/splits");
   redirect(`/splits/${data as string}`);
 }
 
@@ -85,5 +89,5 @@ export async function markShareSettled(formData: FormData): Promise<void> {
   }
 
   revalidatePath(`/splits/${splitId}`);
-  revalidatePath("/balances");
+  revalidatePath("/splits");
 }

@@ -517,7 +517,8 @@ $$;
 create or replace function public.create_even_expense_split(
   p_receipt_id uuid,
   p_receipt_item_id uuid,
-  p_participant_user_ids uuid[]
+  p_participant_user_ids uuid[],
+  p_receiver_payment_method_id uuid default null
 )
 returns uuid
 language plpgsql
@@ -550,6 +551,16 @@ begin
       and r.owner_user_id = v_user_id
   ) then
     raise exception 'receipt must belong to current user'
+      using errcode = '42501';
+  end if;
+
+  if p_receiver_payment_method_id is not null and not exists (
+    select 1
+    from public.user_payment_methods pm
+    where pm.id = p_receiver_payment_method_id
+      and pm.owner_user_id = v_user_id
+  ) then
+    raise exception 'receiver payment method must belong to current user'
       using errcode = '42501';
   end if;
 
@@ -595,6 +606,7 @@ begin
     receipt_item_id,
     created_by_user_id,
     payer_user_id,
+    receiver_payment_method_id,
     split_method,
     total_amount
   )
@@ -603,6 +615,7 @@ begin
     p_receipt_item_id,
     v_user_id,
     v_user_id,
+    p_receiver_payment_method_id,
     'even',
     v_total_amount
   )
@@ -629,7 +642,8 @@ create or replace function public.create_custom_expense_split(
   p_receipt_id uuid,
   p_receipt_item_id uuid,
   p_payer_share_amount numeric,
-  p_shares jsonb
+  p_shares jsonb,
+  p_receiver_payment_method_id uuid default null
 )
 returns uuid
 language plpgsql
@@ -668,6 +682,16 @@ begin
       and r.owner_user_id = v_user_id
   ) then
     raise exception 'receipt must belong to current user'
+      using errcode = '42501';
+  end if;
+
+  if p_receiver_payment_method_id is not null and not exists (
+    select 1
+    from public.user_payment_methods pm
+    where pm.id = p_receiver_payment_method_id
+      and pm.owner_user_id = v_user_id
+  ) then
+    raise exception 'receiver payment method must belong to current user'
       using errcode = '42501';
   end if;
 
@@ -723,6 +747,7 @@ begin
     receipt_item_id,
     created_by_user_id,
     payer_user_id,
+    receiver_payment_method_id,
     split_method,
     total_amount
   )
@@ -731,6 +756,7 @@ begin
     p_receipt_item_id,
     v_user_id,
     v_user_id,
+    p_receiver_payment_method_id,
     'custom',
     v_total_amount
   )
@@ -1157,26 +1183,30 @@ grant select, insert, update, delete on public.expense_split_shares to authentic
 revoke execute on function public.create_even_expense_split(
   uuid,
   uuid,
-  uuid[]
+  uuid[],
+  uuid
 ) from public;
 revoke execute on function public.create_custom_expense_split(
   uuid,
   uuid,
   numeric,
-  jsonb
+  jsonb,
+  uuid
 ) from public;
 revoke execute on function public.mark_split_share_settled(uuid) from public;
 
 grant execute on function public.create_even_expense_split(
   uuid,
   uuid,
-  uuid[]
+  uuid[],
+  uuid
 ) to authenticated;
 grant execute on function public.create_custom_expense_split(
   uuid,
   uuid,
   numeric,
-  jsonb
+  jsonb,
+  uuid
 ) to authenticated;
 grant execute on function public.mark_split_share_settled(uuid)
 to authenticated;
@@ -1217,5 +1247,498 @@ comment on table public.expense_split_shares is
   'Only non-payer debts. The payer never gets a share row.';
 comment on function public.get_current_balances() is
   'Returns netted unsettled balances per user pair for the current user.';
+
+create type public.spendly_share_status as enum (
+  'unpaid',
+  'submitted',
+  'confirmed',
+  'rejected'
+);
+
+create type public.spendly_payment_proof_status as enum (
+  'submitted',
+  'confirmed',
+  'rejected'
+);
+
+create table public.receipt_drafts (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid not null references public.profiles(id) on delete cascade,
+  title text,
+  source text not null default 'receipt',
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint receipt_drafts_title_not_blank check (
+    title is null or length(btrim(title)) > 0
+  ),
+  constraint receipt_drafts_payload_object check (jsonb_typeof(payload) = 'object')
+);
+
+create table public.user_payment_methods (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid not null references public.profiles(id) on delete cascade,
+  label text not null,
+  provider_name text,
+  account_name text,
+  account_reference text,
+  promptpay_id text,
+  qr_image_object_key text,
+  note text,
+  is_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint user_payment_methods_label_not_blank check (length(btrim(label)) > 0),
+  constraint user_payment_methods_qr_not_blank check (
+    qr_image_object_key is null or length(btrim(qr_image_object_key)) > 0
+  )
+);
+
+alter table public.expense_splits
+  add column if not exists receiver_payment_method_id uuid references public.user_payment_methods(id) on delete set null;
+
+alter table public.expense_split_shares
+  add column if not exists share_status public.spendly_share_status not null default 'unpaid',
+  add column if not exists payment_submitted_at timestamptz,
+  add column if not exists payment_confirmed_at timestamptz,
+  add column if not exists payment_rejected_at timestamptz,
+  add column if not exists latest_payment_proof_id uuid;
+
+create table public.share_payment_proofs (
+  id uuid primary key default gen_random_uuid(),
+  share_id uuid not null references public.expense_split_shares(id) on delete cascade,
+  uploader_user_id uuid not null references public.profiles(id) on delete cascade,
+  receiver_user_id uuid not null references public.profiles(id) on delete cascade,
+  image_object_key text not null,
+  note text,
+  review_status public.spendly_payment_proof_status not null default 'submitted',
+  reviewed_at timestamptz,
+  reviewed_by_user_id uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint share_payment_proofs_image_key_not_blank check (
+    length(btrim(image_object_key)) > 0
+  )
+);
+
+alter table public.expense_split_shares
+  add constraint expense_split_shares_latest_payment_proof_fk
+  foreign key (latest_payment_proof_id)
+  references public.share_payment_proofs(id)
+  on delete set null;
+
+create index receipt_drafts_owner_updated_idx
+  on public.receipt_drafts(owner_user_id, updated_at desc);
+create index user_payment_methods_owner_default_idx
+  on public.user_payment_methods(owner_user_id, is_default desc, updated_at desc);
+create index share_payment_proofs_share_created_idx
+  on public.share_payment_proofs(share_id, created_at desc);
+
+create trigger receipt_drafts_set_updated_at
+before update on public.receipt_drafts
+for each row execute function public.set_updated_at();
+
+create trigger user_payment_methods_set_updated_at
+before update on public.user_payment_methods
+for each row execute function public.set_updated_at();
+
+create trigger share_payment_proofs_set_updated_at
+before update on public.share_payment_proofs
+for each row execute function public.set_updated_at();
+
+create or replace function public.ensure_single_default_payment_method()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.is_default then
+    update public.user_payment_methods
+    set is_default = false
+    where owner_user_id = new.owner_user_id
+      and id <> new.id
+      and is_default = true;
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger user_payment_methods_single_default
+before insert or update of is_default
+on public.user_payment_methods
+for each row execute function public.ensure_single_default_payment_method();
+
+create or replace function public.can_view_payment_method(
+  p_payment_method_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (
+    select 1
+    from public.user_payment_methods pm
+    where pm.id = p_payment_method_id
+      and (
+        pm.owner_user_id = auth.uid() or
+        exists (
+          select 1
+          from public.expense_split_shares sh
+          join public.expense_splits s on s.id = sh.split_id
+          where sh.participant_user_id = auth.uid()
+            and s.payer_user_id = pm.owner_user_id
+            and s.receiver_payment_method_id = pm.id
+            and sh.share_status in ('unpaid', 'submitted', 'rejected')
+        )
+      )
+  );
+$$;
+
+create or replace function public.can_view_share_payment_proof(
+  p_proof_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (
+    select 1
+    from public.share_payment_proofs spp
+    where spp.id = p_proof_id
+      and (
+        spp.uploader_user_id = auth.uid() or
+        spp.receiver_user_id = auth.uid()
+      )
+  );
+$$;
+
+create or replace function public.submit_share_payment_proof(
+  p_share_id uuid,
+  p_image_object_key text,
+  p_note text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_receiver_user_id uuid;
+  v_proof_id uuid;
+begin
+  if v_user_id is null then
+    raise exception 'authentication required' using errcode = '28000';
+  end if;
+
+  select s.payer_user_id
+  into v_receiver_user_id
+  from public.expense_split_shares sh
+  join public.expense_splits s on s.id = sh.split_id
+  where sh.id = p_share_id
+    and sh.participant_user_id = v_user_id;
+
+  if v_receiver_user_id is null then
+    raise exception 'share not found or not payable by current user'
+      using errcode = '42501';
+  end if;
+
+  insert into public.share_payment_proofs (
+    share_id,
+    uploader_user_id,
+    receiver_user_id,
+    image_object_key,
+    note
+  )
+  values (
+    p_share_id,
+    v_user_id,
+    v_receiver_user_id,
+    p_image_object_key,
+    nullif(btrim(coalesce(p_note, '')), '')
+  )
+  returning id into v_proof_id;
+
+  update public.expense_split_shares
+  set
+    share_status = 'submitted',
+    payment_submitted_at = now(),
+    payment_rejected_at = null,
+    latest_payment_proof_id = v_proof_id,
+    updated_at = now()
+  where id = p_share_id;
+
+  return v_proof_id;
+end;
+$$;
+
+create or replace function public.review_share_payment_proof(
+  p_share_id uuid,
+  p_decision public.spendly_payment_proof_status
+)
+returns public.expense_split_shares
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_share public.expense_split_shares;
+begin
+  if v_user_id is null then
+    raise exception 'authentication required' using errcode = '28000';
+  end if;
+
+  if p_decision not in ('confirmed', 'rejected') then
+    raise exception 'decision must be confirmed or rejected'
+      using errcode = '23514';
+  end if;
+
+  if not exists (
+    select 1
+    from public.expense_split_shares sh
+    join public.expense_splits s on s.id = sh.split_id
+    where sh.id = p_share_id
+      and s.payer_user_id = v_user_id
+      and sh.latest_payment_proof_id is not null
+  ) then
+    raise exception 'share not found or not reviewable by current user'
+      using errcode = '42501';
+  end if;
+
+  update public.share_payment_proofs
+  set
+    review_status = p_decision,
+    reviewed_at = now(),
+    reviewed_by_user_id = v_user_id,
+    updated_at = now()
+  where id = (
+    select latest_payment_proof_id
+    from public.expense_split_shares
+    where id = p_share_id
+  );
+
+  update public.expense_split_shares
+  set
+    share_status = case
+      when p_decision = 'confirmed' then 'confirmed'::public.spendly_share_status
+      else 'rejected'::public.spendly_share_status
+    end,
+    payment_confirmed_at = case when p_decision = 'confirmed' then now() else null end,
+    payment_rejected_at = case when p_decision = 'rejected' then now() else null end,
+    settled_at = case when p_decision = 'confirmed' then coalesce(settled_at, now()) else null end,
+    settled_by_user_id = case when p_decision = 'confirmed' then coalesce(settled_by_user_id, v_user_id) else null end,
+    updated_at = now()
+  where id = p_share_id
+  returning * into v_share;
+
+  return v_share;
+end;
+$$;
+
+create or replace function public.mark_split_share_settled(p_share_id uuid)
+returns public.expense_split_shares
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid = auth.uid();
+  v_share public.expense_split_shares;
+begin
+  if v_user_id is null then
+    raise exception 'authentication required' using errcode = '28000';
+  end if;
+
+  if not exists (
+    select 1
+    from public.expense_split_shares sh
+    join public.expense_splits s on s.id = sh.split_id
+    where sh.id = p_share_id
+      and (
+        sh.participant_user_id = v_user_id or
+        s.payer_user_id = v_user_id or
+        s.created_by_user_id = v_user_id
+      )
+  ) then
+    raise exception 'split share not found or not accessible'
+      using errcode = '42501';
+  end if;
+
+  update public.expense_split_shares
+  set
+    share_status = 'confirmed',
+    payment_confirmed_at = coalesce(payment_confirmed_at, now()),
+    settled_at = coalesce(settled_at, now()),
+    settled_by_user_id = coalesce(settled_by_user_id, v_user_id),
+    updated_at = now()
+  where id = p_share_id
+  returning * into v_share;
+
+  return v_share;
+end;
+$$;
+
+create or replace function public.get_current_balances()
+returns table (
+  debtor_user_id uuid,
+  debtor_display_name text,
+  creditor_user_id uuid,
+  creditor_display_name text,
+  amount numeric(12, 2)
+)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  with visible_unsettled as (
+    select
+      sh.participant_user_id as debtor_user_id,
+      s.payer_user_id as creditor_user_id,
+      sh.owed_amount
+    from public.expense_split_shares sh
+    join public.expense_splits s on s.id = sh.split_id
+    where sh.share_status in ('unpaid', 'submitted', 'rejected')
+      and (
+        sh.participant_user_id = auth.uid() or
+        s.payer_user_id = auth.uid()
+      )
+  ),
+  canonical as (
+    select
+      case
+        when debtor_user_id::text < creditor_user_id::text
+          then debtor_user_id
+        else creditor_user_id
+      end as user_low,
+      case
+        when debtor_user_id::text < creditor_user_id::text
+          then creditor_user_id
+        else debtor_user_id
+      end as user_high,
+      case
+        when debtor_user_id::text < creditor_user_id::text
+          then owed_amount
+        else -owed_amount
+      end as low_owes_high_amount
+    from visible_unsettled
+  ),
+  netted as (
+    select
+      user_low,
+      user_high,
+      round(sum(low_owes_high_amount), 2) as low_owes_high
+    from canonical
+    group by user_low, user_high
+    having round(sum(low_owes_high_amount), 2) <> 0
+  ),
+  resolved as (
+    select
+      case
+        when low_owes_high > 0 then user_low
+        else user_high
+      end as debtor_user_id,
+      case
+        when low_owes_high > 0 then user_high
+        else user_low
+      end as creditor_user_id,
+      abs(low_owes_high)::numeric(12, 2) as amount
+    from netted
+  )
+  select
+    r.debtor_user_id,
+    debtor.display_name as debtor_display_name,
+    r.creditor_user_id,
+    creditor.display_name as creditor_display_name,
+    r.amount
+  from resolved r
+  join public.profiles debtor on debtor.id = r.debtor_user_id
+  join public.profiles creditor on creditor.id = r.creditor_user_id
+  order by creditor.display_name nulls last, debtor.display_name nulls last;
+$$;
+
+alter table public.receipt_drafts enable row level security;
+alter table public.user_payment_methods enable row level security;
+alter table public.share_payment_proofs enable row level security;
+
+create policy "receipt_drafts_manage_own"
+on public.receipt_drafts
+for all
+to authenticated
+using (owner_user_id = auth.uid())
+with check (owner_user_id = auth.uid());
+
+create policy "user_payment_methods_select_visible"
+on public.user_payment_methods
+for select
+to authenticated
+using (public.can_view_payment_method(id));
+
+create policy "user_payment_methods_manage_own"
+on public.user_payment_methods
+for all
+to authenticated
+using (owner_user_id = auth.uid())
+with check (owner_user_id = auth.uid());
+
+create policy "share_payment_proofs_select_accessible"
+on public.share_payment_proofs
+for select
+to authenticated
+using (public.can_view_share_payment_proof(id));
+
+create policy "share_payment_proofs_insert_by_uploader"
+on public.share_payment_proofs
+for insert
+to authenticated
+with check (uploader_user_id = auth.uid());
+
+create policy "share_payment_proofs_update_by_receiver"
+on public.share_payment_proofs
+for update
+to authenticated
+using (receiver_user_id = auth.uid())
+with check (receiver_user_id = auth.uid());
+
+grant select, insert, update, delete on public.receipt_drafts to authenticated;
+grant select, insert, update, delete on public.user_payment_methods to authenticated;
+grant select, insert, update on public.share_payment_proofs to authenticated;
+
+revoke execute on function public.submit_share_payment_proof(
+  uuid,
+  text,
+  text
+) from public;
+revoke execute on function public.review_share_payment_proof(
+  uuid,
+  public.spendly_payment_proof_status
+) from public;
+
+grant execute on function public.submit_share_payment_proof(
+  uuid,
+  text,
+  text
+) to authenticated;
+grant execute on function public.review_share_payment_proof(
+  uuid,
+  public.spendly_payment_proof_status
+) to authenticated;
+
+comment on table public.receipt_drafts is
+  'Autosaved draft receipts kept separate from final receipt history.';
+comment on table public.user_payment_methods is
+  'Per-user receiving payment methods, optionally including an R2-hosted QR image.';
+comment on table public.share_payment_proofs is
+  'Payment slip submissions for split shares. Images live in R2; Postgres stores metadata only.';
+comment on column public.expense_split_shares.share_status is
+  'Payment lifecycle status for a non-payer share.';
+comment on column public.expense_splits.receiver_payment_method_id is
+  'Selected payment method for receiving money on this split.';
 
 commit;

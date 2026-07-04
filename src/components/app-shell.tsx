@@ -1,10 +1,15 @@
+"use client";
+
 import Link from "next/link";
 
+import { useAppPreferences } from "@/components/app-preferences-provider";
+
 const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/receipts", label: "Receipts" },
-  { href: "/compare", label: "Compare" },
-  { href: "/balances", label: "Balances" },
+  { href: "/dashboard", key: "dashboard" as const },
+  { href: "/compare", key: "compare" as const },
+  { href: "/receipts", key: "receipts" as const },
+  { href: "/splits", key: "splits" as const },
+  { href: "/settings", key: "settings" as const },
 ];
 
 type AppShellProps = {
@@ -14,6 +19,7 @@ type AppShellProps = {
 };
 
 export function AppShell({ children, avatarUrl, displayName }: AppShellProps) {
+  const { dict, locale, setLocale, theme, setTheme } = useAppPreferences();
   const initials = displayName
     .split(/\s+/)
     .slice(0, 2)
@@ -38,12 +44,37 @@ export function AppShell({ children, avatarUrl, displayName }: AppShellProps) {
                   href={item.href}
                   className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
                 >
-                  {item.label}
+                  {dict.nav[item.key]}
                 </Link>
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="grid gap-1 text-xs text-slate-500">
+              <span>{dict.nav.theme}</span>
+              <select
+                value={theme}
+                onChange={(event) =>
+                  setTheme(event.target.value as "system" | "light" | "dark")
+                }
+                className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700"
+              >
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs text-slate-500">
+              <span>{dict.nav.language}</span>
+              <select
+                value={locale}
+                onChange={(event) => setLocale(event.target.value as "en" | "th")}
+                className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700"
+              >
+                <option value="en">EN</option>
+                <option value="th">TH</option>
+              </select>
+            </label>
             {avatarUrl ? (
               <img
                 src={avatarUrl}
@@ -65,7 +96,7 @@ export function AppShell({ children, avatarUrl, displayName }: AppShellProps) {
                 type="submit"
                 className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium transition hover:border-slate-500"
               >
-                Sign out
+                {dict.nav.signOut}
               </button>
             </form>
           </div>

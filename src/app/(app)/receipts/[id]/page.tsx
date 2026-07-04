@@ -9,7 +9,11 @@ import { SplitForm } from "@/components/splits/split-form";
 import { getRequiredUser } from "@/lib/auth";
 import { formatDate, formatMoney, formatUnitPrice } from "@/lib/format";
 import { relationId, relationName } from "@/lib/supabase-helpers";
-import type { ReceiptItemRow, ReceiptSplitSummary } from "@/lib/types";
+import type {
+  ReceiptItemRow,
+  ReceiptSplitSummary,
+  UserPaymentMethod,
+} from "@/lib/types";
 
 type ReceiptDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -38,7 +42,7 @@ export default async function ReceiptDetailPage({
     (receipt.receipt_items ?? []) as unknown as ReceiptItemRow[]
   ).sort((left, right) => left.line_number - right.line_number);
 
-  const [{ data: profiles }, { data: splits }] = await Promise.all([
+  const [{ data: profiles }, { data: splits }, { data: paymentMethods }] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, github_username, display_name")
@@ -48,6 +52,14 @@ export default async function ReceiptDetailPage({
       .select("id, split_method, total_amount, created_at, receipt_item_id")
       .eq("receipt_id", id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("user_payment_methods")
+      .select(
+        "id, label, provider_name, account_name, account_reference, promptpay_id, qr_image_object_key, note, is_default",
+      )
+      .eq("owner_user_id", user.id)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true }),
   ]);
 
   const splitSummaries = (splits ?? []) as ReceiptSplitSummary[];
@@ -164,6 +176,7 @@ export default async function ReceiptDetailPage({
           items={splitItems}
           profiles={profiles ?? []}
           currentUserId={user.id}
+          receiverPaymentMethods={(paymentMethods ?? []) as UserPaymentMethod[]}
         />
 
         {splitSummaries.length > 0 ? (

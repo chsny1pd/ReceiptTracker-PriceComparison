@@ -17,6 +17,7 @@ export type ReceiptLineInput = {
 };
 
 export type CreateReceiptInput = {
+  draftId?: string;
   storeId: string;
   purchasedAt: string;
   subtotal: number;
@@ -82,6 +83,14 @@ export async function createReceipt(input: CreateReceiptInput) {
   if (itemsError) {
     await supabase.from("receipts").delete().eq("id", receipt.id);
     return { error: itemsError.message };
+  }
+
+  if (input.draftId) {
+    await supabase
+      .from("receipt_drafts")
+      .delete()
+      .eq("id", input.draftId)
+      .eq("owner_user_id", user.id);
   }
 
   revalidatePath("/receipts");

@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+
+import { AppPreferencesProvider } from "@/components/app-preferences-provider";
+import { getServerPreferences } from "@/lib/server-preferences";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,17 +20,26 @@ export const metadata: Metadata = {
   description: "Receipt tracking, price comparison, and shared grocery splits.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { locale, theme } = await getServerPreferences();
+
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang={locale}
+      suppressHydrationWarning
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased ${
+        theme === "dark" ? "dark" : ""
+      }`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <AppPreferencesProvider initialLocale={locale} initialTheme={theme}>
+          {children}
+        </AppPreferencesProvider>
+      </body>
     </html>
   );
 }

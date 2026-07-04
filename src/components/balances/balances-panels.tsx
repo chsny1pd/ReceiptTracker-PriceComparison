@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { SettleShareButton } from "@/components/splits/settle-share-button";
 import { formatMoney } from "@/lib/format";
 import { profileLabel } from "@/lib/supabase-helpers";
 import type { BalanceRow, UnsettledShareRow } from "@/lib/types";
@@ -105,6 +104,26 @@ type UnsettledSharesPanelProps = {
   currentUserId: string;
 };
 
+function shareStatusSummary(status: UnsettledShareRow["share_status"]) {
+  switch (status) {
+    case "submitted":
+      return {
+        label: "Payment proof submitted",
+        tone: "text-sky-700",
+      };
+    case "rejected":
+      return {
+        label: "Proof rejected",
+        tone: "text-red-700",
+      };
+    default:
+      return {
+        label: "Awaiting payment",
+        tone: "text-amber-700",
+      };
+  }
+}
+
 export function UnsettledSharesPanel({
   shares,
   currentUserId,
@@ -153,9 +172,7 @@ export function UnsettledSharesPanel({
               share.payer_github_username,
               share.payer_user_id,
             );
-            const canSettle =
-              share.payer_user_id === currentUserId ||
-              share.participant_user_id === currentUserId;
+            const status = shareStatusSummary(share.share_status);
 
             return (
               <tr key={share.id} className="border-b border-slate-100">
@@ -179,19 +196,19 @@ export function UnsettledSharesPanel({
                   {formatMoney(Number(share.owed_amount))}
                 </td>
                 <td className="px-4 py-3">
+                  <p className={`text-sm font-medium ${status.tone}`}>{status.label}</p>
                   <Link
                     href={`/splits/${share.split_id}`}
-                    className="font-medium text-emerald-700"
+                    className="mt-1 inline-flex font-medium text-emerald-700"
                   >
                     Open split
                   </Link>
                 </td>
                 <td className="px-4 py-3">
-                  {canSettle ? (
-                    <SettleShareButton
-                      shareId={share.id}
-                      splitId={share.split_id}
-                    />
+                  {share.participant_user_id === currentUserId ? (
+                    <span className="text-sm text-slate-600">Submit proof in split</span>
+                  ) : share.payer_user_id === currentUserId ? (
+                    <span className="text-sm text-slate-600">Review in split</span>
                   ) : (
                     <span className="text-slate-400">—</span>
                   )}

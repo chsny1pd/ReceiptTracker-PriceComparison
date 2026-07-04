@@ -9,6 +9,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { getRequiredUser } from "@/lib/auth";
 import { formatDate, formatMoney } from "@/lib/format";
+import { getServerI18n } from "@/lib/server-preferences";
 import { relationName } from "@/lib/supabase-helpers";
 
 function toReceiptCard(
@@ -51,18 +52,38 @@ function buildDailySpending(receipts: ReceiptCardData[]): DailySpendingPoint[] {
 
 export default async function DashboardPage() {
   const { supabase, user } = await getRequiredUser();
+  const { dict } = await getServerI18n();
 
-  const { count: receiptCount } = await supabase
-    .from("receipts")
-    .select("*", { count: "exact", head: true })
-    .eq("owner_user_id", user.id);
-
-  const { data: receipts } = await supabase
-    .from("receipts")
-    .select("id, purchased_at, total, stores(name)")
-    .eq("owner_user_id", user.id)
-    .order("purchased_at", { ascending: false })
-    .order("created_at", { ascending: false });
+  const [
+    { count: receiptCount },
+    { data: receipts },
+    { data: drafts },
+    { data: pendingProofShares },
+    { data: balances },
+  ] = await Promise.all([
+    supabase
+      .from("receipts")
+      .select("*", { count: "exact", head: true })
+      .eq("owner_user_id", user.id),
+    supabase
+      .from("receipts")
+      .select("id, purchased_at, total, stores(name)")
+      .eq("owner_user_id", user.id)
+      .order("purchased_at", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("receipt_drafts")
+      .select("id, title, updated_at")
+      .eq("owner_user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(3),
+    supabase
+      .from("expense_split_shares")
+      .select("id")
+      .eq("share_status", "submitted")
+      .limit(20),
+    supabase.rpc("get_current_balances"),
+  ]);
 
   const receiptCards = (receipts ?? []).map(toReceiptCard);
   const dailySpending = buildDailySpending(receiptCards);
@@ -72,58 +93,140 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader
-        title="Dashboard"
-        description="Overview of your spending and recent receipts."
+        title={dict.dashboard.title}
+        description={dict.dashboard.description}
       />
+
+      <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <Link
+          href="/compare"
+          className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
+        >
+          <p className="text-sm font-medium text-emerald-800">{dict.common.quickCompare}</p>
+          <p className="mt-2 text-sm text-emerald-900">{dict.dashboard.compareBlurb}</p>
+        </Link>
+        <Link
+          href="/receipts/new"
+          className="rounded-2xl border border-slate-300 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
+        >
+          <p className="text-sm font-medium text-slate-900">{dict.common.newReceipt}</p>
+          <p className="mt-2 text-sm text-slate-600">{dict.dashboard.receiptBlurb}</p>
+        </Link>
+        <Link
+          href={drafts?.[0] ? `/receipts/new?draft=${drafts[0].id}` : "/receipts"}
+          className="rounded-2xl border border-slate-300 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
+        >
+          <p className="text-sm font-medium text-slate-900">Resume draft</p>
+          <p className="mt-2 text-sm text-slate-600">
+            {drafts?.[0]?.title ?? "Open your saved draft list and continue on any device."}
+          </p>
+        </Link>
+        <Link
+          href="/splits"
+          className="rounded-2xl border border-slate-300 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
+        >
+          <p className="text-sm font-medium text-slate-900">{dict.common.reviewProofs}</p>
+          <p className="mt-2 text-sm text-slate-600">{dict.dashboard.proofBlurb}</p>
+        </Link>
+        <Link
+          href="/splits"
+          className="rounded-2xl border border-slate-300 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
+        >
+          <p className="text-sm font-medium text-slate-900">{dict.common.debts}</p>
+          <p className="mt-2 text-sm text-slate-600">{dict.dashboard.debtBlurb}</p>
+        </Link>
+      </section>
+
+      <section className="mb-8 grid gap-4 lg:grid-cols-3">
+        <article className="rounded-lg border border-slate-300 bg-white p-5">
+          <p className="text-sm text-slate-500">Receipts logged</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">{receiptCount ?? 0}</p>
+        </article>
+        <article className="rounded-lg border border-slate-300 bg-white p-5">
+          <p className="text-sm text-slate-500">Drafts ready</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">{drafts?.length ?? 0}</p>
+        </article>
+        <article className="rounded-lg border border-slate-300 bg-white p-5">
+          <p className="text-sm text-slate-500">{dict.dashboard.pendingProofs}</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">
+            {pendingProofShares?.length ?? 0}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">
+            {(balances ?? []).length} netted balance pair
+            {(balances ?? []).length === 1 ? "" : "s"} still open.
+          </p>
+        </article>
+      </section>
 
       <section className="mb-8">
         <SpendingOverviewChart dailySpending={dailySpending} />
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-4 text-lg font-semibold">Recent receipts</h2>
+        <h2 className="mb-4 text-lg font-semibold">{dict.dashboard.recentReceipts}</h2>
         <ReceiptCarousel receipts={carouselReceipts} />
       </section>
 
-      <section className="rounded-lg border border-slate-300 bg-white p-5">
-        <h2 className="text-lg font-semibold">Recent activity</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          {receiptCount ?? 0} receipt{(receiptCount ?? 0) === 1 ? "" : "s"}{" "}
-          logged so far.
-        </p>
-        {recentReceipts.length > 0 ? (
-          <ul className="mt-4 divide-y divide-slate-200">
-            {recentReceipts.map((receipt) => (
-              <li key={receipt.id} className="flex items-center justify-between py-3">
-                <div>
-                  <p className="font-medium">{receipt.storeName}</p>
-                  <p className="text-sm text-slate-600">
-                    {formatDate(receipt.purchased_at)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium tabular-nums">
-                    {formatMoney(receipt.total)}
-                  </p>
-                  <Link
-                    href={`/receipts/${receipt.id}`}
-                    className="text-sm text-emerald-700"
-                  >
-                    View
-                  </Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-4 text-sm text-slate-600">
-            No receipts yet.{" "}
-            <Link href="/receipts/new" className="font-medium text-emerald-700">
-              Log your first receipt
-            </Link>
-            .
+      <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-lg border border-slate-300 bg-white p-5">
+          <h2 className="text-lg font-semibold">{dict.dashboard.recentActivity}</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            {receiptCount ?? 0} {dict.dashboard.receiptCount}
           </p>
-        )}
+          {recentReceipts.length > 0 ? (
+            <ul className="mt-4 divide-y divide-slate-200">
+              {recentReceipts.map((receipt) => (
+                <li key={receipt.id} className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium">{receipt.storeName}</p>
+                    <p className="text-sm text-slate-600">
+                      {formatDate(receipt.purchased_at)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium tabular-nums">
+                      {formatMoney(receipt.total)}
+                    </p>
+                    <Link
+                      href={`/receipts/${receipt.id}`}
+                      className="text-sm text-emerald-700"
+                    >
+                      {dict.common.view}
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-slate-600">
+              {dict.dashboard.noReceipts}{" "}
+              <Link href="/receipts/new" className="font-medium text-emerald-700">
+                {dict.dashboard.logFirst}
+              </Link>
+              .
+            </p>
+          )}
+        </div>
+        <div className="rounded-lg border border-slate-300 bg-white p-5">
+          <h2 className="text-lg font-semibold">{dict.dashboard.pendingProofs}</h2>
+          {pendingProofShares && pendingProofShares.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm text-slate-600">
+                Submitted payment slips are waiting for receiver review.
+              </p>
+              <Link
+                href="/splits"
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-700 px-5 text-sm font-semibold text-white"
+              >
+                {dict.common.reviewProofs}
+              </Link>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-600">
+              {dict.dashboard.noPendingProofs}
+            </p>
+          )}
+        </div>
       </section>
     </>
   );

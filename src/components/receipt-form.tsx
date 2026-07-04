@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { createStore } from "@/app/actions/catalog";
+import { saveReceiptDraft } from "@/app/actions/drafts";
 import {
   createReceipt,
   type ReceiptLineInput,
@@ -14,7 +15,16 @@ import { Modal } from "@/components/ui/modal";
 import { PendingNotice } from "@/components/ui/pending-notice";
 import { Spinner } from "@/components/ui/spinner";
 import { consumeCompareCartReceiptDraft } from "@/lib/compare-cart";
+import { compressImageIfNeeded } from "@/lib/client-image";
 import { formatMoney, formatUnitPrice } from "@/lib/format";
+import {
+  blankReceiptDraftPayload,
+  clearLocalReceiptDraft,
+  loadLocalReceiptDraft,
+  saveLocalReceiptDraft,
+  type ReceiptDraftLine,
+  type ReceiptDraftPayload,
+} from "@/lib/receipt-drafts";
 import type { Product, SpendlyUnit, Store } from "@/lib/types";
 import {
   normalizeReceiptItem,
@@ -39,6 +49,8 @@ type DraftLine = {
 type ReceiptFormProps = {
   stores: Store[];
   products: Product[];
+  initialDraft?: ReceiptDraftPayload | null;
+  initialDraftId?: string | null;
 };
 
 function emptyLine(products: Product[]): DraftLine {
@@ -52,6 +64,19 @@ function emptyLine(products: Product[]): DraftLine {
     lineTotal: "0",
     imageObjectKey: null,
     imageName: null,
+  };
+}
+
+function lineFromDraft(line: ReceiptDraftLine): DraftLine {
+  return {
+    key: line.key || crypto.randomUUID(),
+    productId: line.productId,
+    rawName: line.rawName,
+    quantity: line.quantity,
+    unit: line.unit,
+    lineTotal: line.lineTotal,
+    imageObjectKey: line.imageObjectKey,
+    imageName: line.imageName,
   };
 }
 
@@ -84,34 +109,59 @@ function draftLineToState(
   }));
 }
 
-export function ReceiptForm({ stores, products }: ReceiptFormProps) {
+export function ReceiptForm({
+  stores,
+  products,
+  initialDraft,
+  initialDraftId,
+}: ReceiptFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isAddingStore, startAddStoreTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [storeId, setStoreId] = useState(() => stores[0]?.id ?? "");
-  const [purchasedAt, setPurchasedAt] = useState(
-    new Date().toISOString().slice(0, 10),
+
+  const compareDraft = consumeCompareCartReceiptDraft();
+  const localDraft = initialDraft ? null : loadLocalReceiptDraft();
+  const effectiveInitialDraft =
+    initialDraft ??
+    localDraft ??
+    (compareDraft
+      ? {
+          ...blankReceiptDraftPayload(),
+          lines: draftLineToState(compareDraft),
+        }
+      : null);
+
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [storeId, setStoreId] = useState(
+    () => effectiveInitialDraft?.storeId || stores[0]?.id || "",
   );
-  const [notes, setNotes] = useState("");
-  const [imageObjectKey, setImageObjectKey] = useState<string | null>(null);
-  const [imageName, setImageName] = useState<string | null>(null);
+  const [purchasedAt, setPurchasedAt] = useState(
+    effectiveInitialDraft?.purchasedAt ?? new Date().toISOString().slice(0, 10),
+  );
+  const [notes, setNotes] = useState(effectiveInitialDraft?.notes ?? "");
+  const [imageObjectKey, setImageObjectKey] = useState<string | null>(
+    effectiveInitialDraft?.imageObjectKey ?? null,
+  );
+  const [imageName, setImageName] = useState<string | null>(
+    effectiveInitialDraft?.imageName ?? null,
+  );
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingLineKey, setUploadingLineKey] = useState<string | null>(null);
   const [lines, setLines] = useState<DraftLine[]>(() => {
-    const draft = consumeCompareCartReceiptDraft();
-    if (draft) {
-      return draftLineToState(draft);
+    if (effectiveInitialDraft?.lines.length) {
+      return effectiveInitialDraft.lines.map(lineFromDraft);
     }
-
     return products.length > 0 ? [emptyLine(products)] : [];
   });
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [storeModalOpen, setStoreModalOpen] = useState(false);
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [productModalLineKey, setProductModalLineKey] = useState<string | null>(
     null,
   );
   const [newStoreName, setNewStoreName] = useState("");
+  const lastSerializedDraft = useRef<string>("");
 
   const productMap = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
@@ -132,7 +182,72 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
       [computedGrossTotal],
     );
 
-  const isBusy = isPending || isAddingStore || uploadingImage || uploadingLineKey !== null;
+  const isBusy =
+    isPending || isAddingStore || uploadingImage || uploadingLineKey !== null;
+
+  const draftPayload = useMemo<ReceiptDraftPayload>(
+    () => ({
+      storeId,
+      purchasedAt,
+      notes,
+      imageObjectKey,
+      imageName,
+      lines: lines.map((line) => ({
+        key: line.key,
+        productId: line.productId,
+        rawName: line.rawName,
+        quantity: line.quantity,
+        unit: line.unit,
+        lineTotal: line.lineTotal,
+        imageObjectKey: line.imageObjectKey,
+        imageName: line.imageName,
+      })),
+    }),
+    [storeId, purchasedAt, notes, imageObjectKey, imageName, lines],
+  );
+
+  const hasMeaningfulDraftContent = useMemo(
+    () =>
+      Boolean(
+        notes.trim() ||
+          imageObjectKey ||
+          lines.some(
+            (line) =>
+              line.rawName.trim() ||
+              Number(line.lineTotal) > 0 ||
+              line.imageObjectKey ||
+              line.quantity !== "1",
+          ),
+      ),
+    [notes, imageObjectKey, lines],
+  );
+
+  useEffect(() => {
+    if (!hasMeaningfulDraftContent) {
+      return;
+    }
+
+    saveLocalReceiptDraft(draftPayload);
+    const serialized = JSON.stringify(draftPayload);
+    if (serialized === lastSerializedDraft.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(async () => {
+      setIsSavingDraft(true);
+      const result = await saveReceiptDraft({
+        draftId,
+        payload: draftPayload,
+      });
+      if (result.data?.id) {
+        setDraftId(result.data.id);
+        lastSerializedDraft.current = serialized;
+      }
+      setIsSavingDraft(false);
+    }, 900);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [draftPayload, draftId, hasMeaningfulDraftContent]);
 
   function updateLine(key: string, patch: Partial<DraftLine>) {
     setLines((current) =>
@@ -200,6 +315,13 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     router.refresh();
   }
 
+  async function prepareUploadFile(file: File, maxDimension: number) {
+    return compressImageIfNeeded(file, {
+      maxDimension,
+      maxBytes: 4.5 * 1024 * 1024,
+    });
+  }
+
   async function handleImageChange(file: File | null) {
     if (!file) {
       setImageObjectKey(null);
@@ -211,12 +333,13 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     setError(null);
 
     try {
+      const compressedFile = await prepareUploadFile(file, 1800);
       const presignResponse = await fetch("/api/receipt-images/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contentType: file.type,
-          fileSize: file.size,
+          contentType: compressedFile.type,
+          fileSize: compressedFile.size,
         }),
       });
       const presignPayload = (await presignResponse.json()) as {
@@ -231,8 +354,8 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
 
       const uploadResponse = await fetch(presignPayload.uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
+        headers: { "Content-Type": compressedFile.type },
+        body: compressedFile,
       });
 
       if (!uploadResponse.ok) {
@@ -240,7 +363,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
       }
 
       setImageObjectKey(presignPayload.objectKey ?? null);
-      setImageName(file.name);
+      setImageName(compressedFile.name);
     } catch (uploadError) {
       setImageObjectKey(null);
       setImageName(null);
@@ -264,12 +387,13 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     setError(null);
 
     try {
+      const compressedFile = await prepareUploadFile(file, 1600);
       const presignResponse = await fetch("/api/item-images/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contentType: file.type,
-          fileSize: file.size,
+          contentType: compressedFile.type,
+          fileSize: compressedFile.size,
         }),
       });
       const presignPayload = (await presignResponse.json()) as {
@@ -286,8 +410,8 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
 
       const uploadResponse = await fetch(presignPayload.uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
+        headers: { "Content-Type": compressedFile.type },
+        body: compressedFile,
       });
 
       if (!uploadResponse.ok) {
@@ -296,7 +420,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
 
       updateLine(lineKey, {
         imageObjectKey: presignPayload.objectKey ?? null,
-        imageName: file.name,
+        imageName: compressedFile.name,
       });
     } catch (uploadError) {
       updateLine(lineKey, { imageObjectKey: null, imageName: null });
@@ -336,7 +460,9 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     }
 
     startTransition(async () => {
+      clearLocalReceiptDraft();
       const result = await createReceipt({
+        draftId: draftId ?? undefined,
         storeId,
         purchasedAt,
         subtotal: computedSubtotal,
@@ -354,7 +480,9 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
   }
 
   let pendingMessage = "Saving receipt...";
-  if (uploadingImage) {
+  if (isSavingDraft) {
+    pendingMessage = "Saving draft...";
+  } else if (uploadingImage) {
     pendingMessage = "Uploading receipt image...";
   } else if (uploadingLineKey) {
     pendingMessage = "Uploading item image...";
@@ -364,13 +492,31 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
 
   return (
     <>
-      <PendingNotice show={isBusy} message={pendingMessage} />
+      <PendingNotice show={isBusy || isSavingDraft} message={pendingMessage} />
 
-      <form onSubmit={handleSubmit} className="space-y-8" aria-busy={isBusy}>
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-8"
+        aria-busy={isBusy || isSavingDraft}
+      >
         <FormErrorSummary message={error} />
 
         <section className="rounded-lg border border-slate-300 bg-white p-5">
-          <h2 className="text-lg font-semibold">Receipt details</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Receipt details</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Drafts autosave locally and to your account while you work.
+              </p>
+            </div>
+            <span className="text-sm text-slate-500">
+              {isSavingDraft
+                ? "Saving draft..."
+                : draftId
+                  ? "Draft saved"
+                  : "Autosave starts after real input"}
+            </span>
+          </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <label className="grid gap-2 text-sm">
               <span className="flex items-center justify-between gap-3">
@@ -423,9 +569,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
               <p className="flex h-11 items-center rounded-lg bg-slate-50 px-3 tabular-nums text-slate-700">
                 {formatMoney(computedTax)}
               </p>
-              <p className="text-xs text-slate-500">
-                VAT portion of line totals.
-              </p>
+              <p className="text-xs text-slate-500">VAT portion of line totals.</p>
             </div>
             <div className="grid gap-2 text-sm">
               <span className="font-medium">Total</span>
@@ -433,7 +577,8 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                 {formatMoney(computedTotal)}
               </p>
               <p className="text-xs text-slate-500">
-                Sum of line totals (subtotal + tax).
+                Final receipt data starts affecting saved insights only after you
+                save.
               </p>
             </div>
             <label className="grid gap-2 text-sm md:col-span-2">
@@ -459,7 +604,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
               {uploadingImage ? (
                 <span className="inline-flex items-center gap-2 text-sm text-slate-500">
                   <Spinner size="sm" />
-                  Uploading to R2...
+                  Compressing and uploading to R2...
                 </span>
               ) : null}
               {imageName ? (
@@ -488,8 +633,8 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
           {lines.length === 0 ? (
             <div className="mt-4 rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center">
               <p className="text-sm text-slate-600">
-                No line items yet. Add an item, then use{" "}
-                <strong>Add product</strong> if you need a new product.
+                No line items yet. Add an item, then use <strong>Add product</strong>{" "}
+                if you need a new product.
               </p>
               <button
                 type="button"
@@ -626,9 +771,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                         required
                         className="h-11 rounded-lg border border-slate-300 px-3 tabular-nums"
                       />
-                      <p className="text-xs text-slate-500">
-                        Includes 7% VAT.
-                      </p>
+                      <p className="text-xs text-slate-500">Includes 7% VAT.</p>
                     </label>
                     <div className="grid gap-2 text-sm">
                       <span className="font-medium">Normalized preview</span>
@@ -658,7 +801,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                       {uploadingLineKey === line.key ? (
                         <span className="inline-flex items-center gap-2 text-sm text-slate-500">
                           <Spinner size="sm" />
-                          Uploading to R2...
+                          Compressing and uploading to R2...
                         </span>
                       ) : null}
                       {line.imageName ? (

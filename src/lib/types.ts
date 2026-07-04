@@ -1,5 +1,10 @@
 export type SpendlyUnit = "g" | "kg" | "ml" | "l" | "each";
 export type SpendlyUnitCategory = "mass" | "volume" | "each";
+export type SpendlyShareStatus =
+  | "unpaid"
+  | "submitted"
+  | "confirmed"
+  | "rejected";
 
 export type Store = {
   id: string;
@@ -88,6 +93,8 @@ export type SplitShareDetail = {
   participant_user_id: string;
   owed_amount: number;
   settled_at: string | null;
+  share_status: SpendlyShareStatus;
+  latest_payment_proof_id: string | null;
   participant_display_name: string | null;
   participant_github_username: string | null;
 };
@@ -109,6 +116,7 @@ export type UnsettledShareRow = {
   id: string;
   split_id: string;
   owed_amount: number;
+  share_status: SpendlyShareStatus;
   participant_user_id: string;
   participant_display_name: string | null;
   participant_github_username: string | null;
@@ -116,4 +124,34 @@ export type UnsettledShareRow = {
   payer_display_name: string | null;
   payer_github_username: string | null;
   receipt_id: string;
+};
+
+export type ReceiptDraftListItem = {
+  id: string;
+  title: string | null;
+  updated_at: string;
+};
+
+export type UserPaymentMethod = {
+  id: string;
+  label: string;
+  provider_name: string | null;
+  account_name: string | null;
+  account_reference: string | null;
+  promptpay_id: string | null;
+  qr_image_object_key: string | null;
+  note: string | null;
+  is_default: boolean;
+};
+
+export type SharePaymentProof = {
+  id: string;
+  share_id: string;
+  uploader_user_id: string;
+  receiver_user_id: string;
+  image_object_key: string;
+  note: string | null;
+  review_status: "submitted" | "confirmed" | "rejected";
+  reviewed_at: string | null;
+  created_at: string;
 };
