@@ -11,12 +11,14 @@ type CompareCartPanelProps = {
   items: CompareCartItem[];
   onUpdateQuantity: (key: string, quantity: number) => void;
   onRemove: (key: string) => void;
+  onCreateReceipt: () => void;
 };
 
 export function CompareCartPanel({
   items,
   onUpdateQuantity,
   onRemove,
+  onCreateReceipt,
 }: CompareCartPanelProps) {
   const subtotal = items.reduce(
     (sum, item) => sum + lineTotalForCartItem(item),
@@ -98,6 +100,14 @@ export function CompareCartPanel({
             {formatMoney(subtotal)}
           </span>
         </div>
+
+        <button
+          type="button"
+          onClick={onCreateReceipt}
+          className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
+        >
+          Create Receipt
+        </button>
       </div>
     </aside>
   );

@@ -534,16 +534,6 @@ export function CompareForm({
           ) : null}
         </>
       ) : null}
-
-      {showCart ? (
-        <button
-          type="button"
-          onClick={handleCreateReceipt}
-          className="inline-flex h-12 items-center justify-center rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:bg-emerald-600"
-        >
-          Create Receipt
-        </button>
-      ) : null}
       </div>
 
       {showCart ? (
@@ -551,6 +541,7 @@ export function CompareForm({
           items={cartItems}
           onUpdateQuantity={updateCartQuantity}
           onRemove={removeCartItem}
+          onCreateReceipt={handleCreateReceipt}
         />
       ) : null}
     </div>
