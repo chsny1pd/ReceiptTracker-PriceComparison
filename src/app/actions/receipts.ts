@@ -13,6 +13,7 @@ export type ReceiptLineInput = {
   quantity: number;
   unit: SpendlyUnit;
   lineTotal: number;
+  imageObjectKey?: string;
 };
 
 export type CreateReceiptInput = {
@@ -71,6 +72,7 @@ export async function createReceipt(input: CreateReceiptInput) {
     normalized_quantity: 0,
     normalized_unit: item.unit,
     normalized_unit_price: 0,
+    image_object_key: item.imageObjectKey || null,
   }));
 
   const { error: itemsError } = await supabase
@@ -98,7 +100,7 @@ export async function deleteReceipt(formData: FormData): Promise<void> {
 
   const { data: receipt, error: fetchError } = await supabase
     .from("receipts")
-    .select("id, image_object_key")
+    .select("id, image_object_key, receipt_items(image_object_key)")
     .eq("id", receiptId)
     .eq("owner_user_id", user.id)
     .single();
@@ -119,6 +121,20 @@ export async function deleteReceipt(formData: FormData): Promise<void> {
   if (receipt.image_object_key) {
     try {
       await deleteR2Object(receipt.image_object_key);
+    } catch {
+      // Receipt is already deleted; orphaned R2 objects are acceptable for demo scope.
+    }
+  }
+
+  const itemImageKeys = (
+    (receipt.receipt_items ?? []) as { image_object_key: string | null }[]
+  )
+    .map((item) => item.image_object_key)
+    .filter((key): key is string => Boolean(key));
+
+  for (const objectKey of itemImageKeys) {
+    try {
+      await deleteR2Object(objectKey);
     } catch {
       // Receipt is already deleted; orphaned R2 objects are acceptable for demo scope.
     }

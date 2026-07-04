@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
 import { DeleteReceiptButton } from "@/components/receipts/delete-receipt-button";
+import { ItemImage } from "@/components/item-image";
 import { ReceiptImage } from "@/components/receipt-image";
 import { SplitForm } from "@/components/splits/split-form";
 import { getRequiredUser } from "@/lib/auth";
@@ -23,7 +24,7 @@ export default async function ReceiptDetailPage({
   const { data: receipt, error } = await supabase
     .from("receipts")
     .select(
-      "id, purchased_at, subtotal, tax, total, notes, image_object_key, stores(name, location), receipt_items(id, line_number, raw_name, quantity, unit, line_total, normalized_quantity, normalized_unit, normalized_unit_price, product:products(id, name))",
+      "id, purchased_at, subtotal, tax, total, notes, image_object_key, stores(name, location), receipt_items(id, line_number, raw_name, quantity, unit, line_total, normalized_quantity, normalized_unit, normalized_unit_price, image_object_key, product:products(id, name))",
     )
     .eq("id", id)
     .eq("owner_user_id", user.id)
@@ -127,6 +128,14 @@ export default async function ReceiptDetailPage({
                     >
                       View price history
                     </Link>
+                  ) : null}
+                  {item.image_object_key ? (
+                    <div className="mt-3 max-w-xs">
+                      <ItemImage
+                        itemId={item.id}
+                        alt={`${item.raw_name} item image`}
+                      />
+                    </div>
                   ) : null}
                 </td>
                 <td className="px-4 py-3 tabular-nums">

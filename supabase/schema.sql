@@ -37,14 +37,10 @@ create table public.products (
   name citext not null,
   unit_category public.spendly_unit_category not null,
   default_unit public.spendly_unit not null,
-  image_object_key text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint products_name_not_blank check (length(btrim(name::text)) > 0),
   constraint products_owner_name_unique unique (owner_user_id, name),
-  constraint products_image_key_not_blank check (
-    image_object_key is null or length(btrim(image_object_key)) > 0
-  ),
   constraint products_default_unit_matches_category check (
     (unit_category = 'mass' and default_unit = 'kg') or
     (unit_category = 'volume' and default_unit = 'l') or
@@ -85,9 +81,13 @@ create table public.receipt_items (
   normalized_unit public.spendly_unit not null,
   line_total numeric(12, 2) not null,
   normalized_unit_price numeric(12, 4) not null,
+  image_object_key text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint receipt_items_line_number_positive check (line_number > 0),
+  constraint receipt_items_image_key_not_blank check (
+    image_object_key is null or length(btrim(image_object_key)) > 0
+  ),
   constraint receipt_items_raw_name_not_blank check (length(btrim(raw_name)) > 0),
   constraint receipt_items_quantity_positive check (quantity > 0),
   constraint receipt_items_line_total_non_negative check (line_total >= 0),
@@ -1209,6 +1209,8 @@ comment on column public.receipts.image_object_key is
   'Cloudflare R2 object key. No binary image data is stored in Postgres.';
 comment on table public.receipt_items is
   'Receipt line items with normalized quantity and unit price.';
+comment on column public.receipt_items.image_object_key is
+  'Optional Cloudflare R2 object key for this line item. No binary image data is stored in Postgres.';
 comment on table public.expense_splits is
   'Receipt-level or item-level split paid by payer_user_id.';
 comment on table public.expense_split_shares is

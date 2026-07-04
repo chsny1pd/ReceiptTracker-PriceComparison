@@ -25,21 +25,14 @@ export function AddProductModal({
   const [newProductCategory, setNewProductCategory] = useState<
     "mass" | "volume" | "each"
   >("mass");
-  const [imageObjectKey, setImageObjectKey] = useState<string | null>(null);
-  const [imageName, setImageName] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
-
-  const isBusy = isAddingProduct || uploadingImage;
 
   function resetForm() {
     setNewProductName("");
     setNewProductCategory("mass");
-    setImageObjectKey(null);
-    setImageName(null);
   }
 
   function handleClose() {
-    if (isBusy) {
+    if (isAddingProduct) {
       return;
     }
 
@@ -47,70 +40,11 @@ export function AddProductModal({
     onClose();
   }
 
-  async function handleImageChange(file: File | null) {
-    if (!file) {
-      setImageObjectKey(null);
-      setImageName(null);
-      return;
-    }
-
-    setUploadingImage(true);
-    onError("");
-
-    try {
-      const presignResponse = await fetch("/api/product-images/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contentType: file.type,
-          fileSize: file.size,
-        }),
-      });
-      const presignPayload = (await presignResponse.json()) as {
-        objectKey?: string;
-        uploadUrl?: string;
-        error?: string;
-      };
-
-      if (!presignResponse.ok || !presignPayload.uploadUrl) {
-        throw new Error(
-          presignPayload.error ?? "Could not prepare image upload.",
-        );
-      }
-
-      const uploadResponse = await fetch(presignPayload.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Image upload to R2 failed.");
-      }
-
-      setImageObjectKey(presignPayload.objectKey ?? null);
-      setImageName(file.name);
-    } catch (uploadError) {
-      setImageObjectKey(null);
-      setImageName(null);
-      onError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "Image upload failed.",
-      );
-    } finally {
-      setUploadingImage(false);
-    }
-  }
-
   function handleAddProduct() {
     onError("");
     const formData = new FormData();
     formData.set("name", newProductName);
     formData.set("unitCategory", newProductCategory);
-    if (imageObjectKey) {
-      formData.set("imageObjectKey", imageObjectKey);
-    }
 
     startAddProductTransition(async () => {
       const result = await createProduct(formData);
@@ -157,32 +91,9 @@ export function AddProductModal({
             <option value="each">Each</option>
           </select>
         </label>
-        <label className="grid gap-2 text-sm">
-          <span className="font-medium">Product image (optional)</span>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            disabled={uploadingImage}
-            onChange={(event) =>
-              void handleImageChange(event.target.files?.[0] ?? null)
-            }
-            className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-60"
-          />
-          {uploadingImage ? (
-            <span className="inline-flex items-center gap-2 text-sm text-slate-500">
-              <Spinner size="sm" />
-              Uploading to R2...
-            </span>
-          ) : null}
-          {imageName ? (
-            <span className="text-sm text-emerald-700">
-              Uploaded: {imageName}
-            </span>
-          ) : null}
-        </label>
         <button
           type="button"
-          disabled={isBusy || !newProductName.trim()}
+          disabled={isAddingProduct || !newProductName.trim()}
           onClick={handleAddProduct}
           className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >

@@ -32,6 +32,8 @@ type DraftLine = {
   quantity: string;
   unit: SpendlyUnit;
   lineTotal: string;
+  imageObjectKey: string | null;
+  imageName: string | null;
 };
 
 type ReceiptFormProps = {
@@ -48,6 +50,8 @@ function emptyLine(products: Product[]): DraftLine {
     quantity: "1",
     unit: firstProduct?.default_unit ?? "each",
     lineTotal: "0",
+    imageObjectKey: null,
+    imageName: null,
   };
 }
 
@@ -75,6 +79,8 @@ function draftLineToState(
     quantity: line.quantity,
     unit: line.unit,
     lineTotal: line.lineTotal,
+    imageObjectKey: null,
+    imageName: null,
   }));
 }
 
@@ -91,6 +97,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
   const [imageObjectKey, setImageObjectKey] = useState<string | null>(null);
   const [imageName, setImageName] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingLineKey, setUploadingLineKey] = useState<string | null>(null);
   const [lines, setLines] = useState<DraftLine[]>(() => {
     const draft = consumeCompareCartReceiptDraft();
     if (draft) {
@@ -125,7 +132,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
       [computedGrossTotal],
     );
 
-  const isBusy = isPending || isAddingStore || uploadingImage;
+  const isBusy = isPending || isAddingStore || uploadingImage || uploadingLineKey !== null;
 
   function updateLine(key: string, patch: Partial<DraftLine>) {
     setLines((current) =>
@@ -183,6 +190,8 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
           quantity: "1",
           unit: product.default_unit,
           lineTotal: "0",
+          imageObjectKey: null,
+          imageName: null,
         },
       ]);
     }
@@ -245,6 +254,62 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
     }
   }
 
+  async function handleLineImageChange(lineKey: string, file: File | null) {
+    if (!file) {
+      updateLine(lineKey, { imageObjectKey: null, imageName: null });
+      return;
+    }
+
+    setUploadingLineKey(lineKey);
+    setError(null);
+
+    try {
+      const presignResponse = await fetch("/api/item-images/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contentType: file.type,
+          fileSize: file.size,
+        }),
+      });
+      const presignPayload = (await presignResponse.json()) as {
+        objectKey?: string;
+        uploadUrl?: string;
+        error?: string;
+      };
+
+      if (!presignResponse.ok || !presignPayload.uploadUrl) {
+        throw new Error(
+          presignPayload.error ?? "Could not prepare item image upload.",
+        );
+      }
+
+      const uploadResponse = await fetch(presignPayload.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Item image upload to R2 failed.");
+      }
+
+      updateLine(lineKey, {
+        imageObjectKey: presignPayload.objectKey ?? null,
+        imageName: file.name,
+      });
+    } catch (uploadError) {
+      updateLine(lineKey, { imageObjectKey: null, imageName: null });
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Item image upload failed.",
+      );
+    } finally {
+      setUploadingLineKey(null);
+    }
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -262,6 +327,7 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
         quantity: Number(line.quantity),
         unit: line.unit,
         lineTotal: Number(line.lineTotal),
+        imageObjectKey: line.imageObjectKey ?? undefined,
       }));
 
     if (parsedItems.length === 0) {
@@ -290,6 +356,8 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
   let pendingMessage = "Saving receipt...";
   if (uploadingImage) {
     pendingMessage = "Uploading receipt image...";
+  } else if (uploadingLineKey) {
+    pendingMessage = "Uploading item image...";
   } else if (isAddingStore) {
     pendingMessage = "Adding store...";
   }
@@ -573,6 +641,32 @@ export function ReceiptForm({ stores, products }: ReceiptFormProps) {
                           : "Enter quantity and total"}
                       </p>
                     </div>
+                    <label className="grid gap-2 text-sm md:col-span-2">
+                      <span className="font-medium">Item image (optional)</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={uploadingLineKey === line.key}
+                        onChange={(event) =>
+                          void handleLineImageChange(
+                            line.key,
+                            event.target.files?.[0] ?? null,
+                          )
+                        }
+                        className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-60"
+                      />
+                      {uploadingLineKey === line.key ? (
+                        <span className="inline-flex items-center gap-2 text-sm text-slate-500">
+                          <Spinner size="sm" />
+                          Uploading to R2...
+                        </span>
+                      ) : null}
+                      {line.imageName ? (
+                        <span className="text-sm text-emerald-700">
+                          Uploaded: {line.imageName}
+                        </span>
+                      ) : null}
+                    </label>
                   </div>
                   {product &&
                   unitCategoryForUnit(line.unit) !== product.unit_category ? (

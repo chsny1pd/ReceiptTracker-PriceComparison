@@ -30,20 +30,20 @@ export async function POST(request: Request) {
 
   if (!body.contentType || !allowedContentTypes.has(body.contentType)) {
     return NextResponse.json(
-      { error: "Product image must be jpeg, png, or webp." },
+      { error: "Item image must be jpeg, png, or webp." },
       { status: 400 },
     );
   }
 
   if (!body.fileSize || body.fileSize <= 0 || body.fileSize > maxImageBytes) {
     return NextResponse.json(
-      { error: "Product image must be 5MB or smaller." },
+      { error: "Item image must be 5MB or smaller." },
       { status: 400 },
     );
   }
 
   const extension = extensionForContentType(body.contentType);
-  const objectKey = `products/${user.id}/${randomUUID()}.${extension}`;
+  const objectKey = `receipt-items/${user.id}/${randomUUID()}.${extension}`;
   const command = new PutObjectCommand({
     Bucket: getR2BucketName(),
     Key: objectKey,

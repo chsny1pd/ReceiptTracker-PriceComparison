@@ -31,6 +31,7 @@ export type ReceiptItemRow = {
   normalized_quantity: number;
   normalized_unit: SpendlyUnit;
   normalized_unit_price: number;
+  image_object_key: string | null;
   product: { id: string; name: string } | null;
 };
 
