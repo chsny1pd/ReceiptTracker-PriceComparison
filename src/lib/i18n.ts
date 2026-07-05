@@ -440,8 +440,9 @@ const dictionaries = {
     auth: {
       signInTitle: "Sign in to compare prices, log receipts, and settle shared costs.",
       signInCta: "Continue with GitHub",
-      oauthError: "GitHub sign-in failed. Check Supabase OAuth settings and try again.",
-      signInBody: "GitHub OAuth is handled by Supabase Auth. Receipt images stay in Cloudflare R2, and Spendly stores only object keys in Postgres.",
+      signInGoogleCta: "Continue with Google",
+      oauthError: "Sign-in failed. Check Supabase OAuth settings and try again.",
+      signInBody: "GitHub and Google sign-in are handled by Supabase Auth. Receipt images stay in Cloudflare R2, and Spendly stores only object keys in Postgres.",
     },
     products: {
       priceHistoryTitleSuffix: "price history",
@@ -910,8 +911,9 @@ const dictionaries = {
     auth: {
       signInTitle: "เข้าสู่ระบบเพื่อเปรียบเทียบราคา บันทึกใบเสร็จ และปิดยอดหารบิล",
       signInCta: "ดำเนินการต่อด้วย GitHub",
-      oauthError: "เข้าสู่ระบบด้วย GitHub ไม่สำเร็จ ตรวจสอบการตั้งค่า Supabase OAuth แล้วลองใหม่",
-      signInBody: "ระบบ GitHub OAuth ดำเนินการผ่าน Supabase Auth รูปใบเสร็จเก็บไว้ใน Cloudflare R2 ส่วน Spendly เก็บเฉพาะ object key ใน Postgres",
+      signInGoogleCta: "ดำเนินการต่อด้วย Google",
+      oauthError: "เข้าสู่ระบบไม่สำเร็จ ตรวจสอบการตั้งค่า Supabase OAuth แล้วลองใหม่",
+      signInBody: "ระบบ GitHub และ Google OAuth ดำเนินการผ่าน Supabase Auth รูปใบเสร็จเก็บไว้ใน Cloudflare R2 ส่วน Spendly เก็บเฉพาะ object key ใน Postgres",
     },
     products: {
       priceHistoryTitleSuffix: "ประวัติราคา",

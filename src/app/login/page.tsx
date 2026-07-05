@@ -1,5 +1,5 @@
-import Link from "next/link";
-
+import { GitHubIcon, GoogleIcon } from "@/components/auth/oauth-icons";
+import { OAuthSignInButton } from "@/components/auth/oauth-sign-in-button";
 import { getServerI18n } from "@/lib/server-preferences";
 
 type LoginPageProps = {
@@ -30,12 +30,18 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </p>
           ) : null}
 
-          <Link
-            href="/auth/sign-in"
-            className="login-button mt-8 inline-flex h-12 w-full items-center justify-center rounded-lg px-5 text-sm font-semibold transition"
-          >
-            {dict.auth.signInCta}
-          </Link>
+          <div className="mt-8 flex flex-col gap-3">
+            <OAuthSignInButton
+              href="/auth/sign-in"
+              label={dict.auth.signInCta}
+              icon={<GitHubIcon />}
+            />
+            <OAuthSignInButton
+              href="/auth/sign-in/google"
+              label={dict.auth.signInGoogleCta}
+              icon={<GoogleIcon />}
+            />
+          </div>
         </div>
       </div>
     </main>
