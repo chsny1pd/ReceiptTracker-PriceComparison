@@ -341,6 +341,91 @@ html[data-theme="dark"] textarea::placeholder {
   color: var(--muted);
 }
 
+html.dark .bg-slate-50\/70,
+html[data-theme="dark"] .bg-slate-50\/70 {
+  background-color: rgb(15 23 42 / 0.72);
+}
+
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+html[data-theme="dark"] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border);
+}
+
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html[data-theme="dark"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border);
+}
+
+[data-panel="split-form"] {
+  --split-panel-border: #cbd5e1;
+  --split-header-from: rgb(236 253 245 / 0.85);
+  --split-header-to: #ffffff;
+  --split-section-bg: #f8fafc;
+  --split-inset-bg: #ffffff;
+  --split-inset-border: #e2e8f0;
+  --split-toggle-idle-border: #cbd5e1;
+  --split-toggle-idle-text: #334155;
+  --split-toggle-idle-hover: #94a3b8;
+}
+
+html.dark [data-panel="split-form"],
+html[data-theme="dark"] [data-panel="split-form"] {
+  --split-panel-border: rgb(52 211 153 / 0.22);
+  --split-header-from: rgb(6 78 59 / 0.55);
+  --split-header-to: #0f172a;
+  --split-section-bg: #111827;
+  --split-inset-bg: #1e293b;
+  --split-inset-border: #334155;
+  --split-toggle-idle-border: #475569;
+  --split-toggle-idle-text: #cbd5e1;
+  --split-toggle-idle-hover: #94a3b8;
+}
+
+[data-panel="split-form"] .split-form-shell {
+  border-color: var(--split-panel-border);
+}
+
+[data-panel="split-form"] .split-form-header {
+  background: linear-gradient(
+    135deg,
+    var(--split-header-from),
+    var(--split-header-to)
+  );
+}
+
+[data-panel="split-form"] .split-form-section {
+  background-color: var(--split-section-bg);
+}
+
+[data-panel="split-form"] .split-form-inset {
+  background-color: var(--split-inset-bg);
+  border: 1px solid var(--split-inset-border);
+}
+
+[data-panel="split-form"] .split-form-toggle-idle {
+  border-color: var(--split-toggle-idle-border);
+  color: var(--split-toggle-idle-text);
+}
+
+[data-panel="split-form"] .split-form-toggle-idle:hover {
+  border-color: var(--split-toggle-idle-hover);
+}
+
+[data-panel="split-form"] .split-form-toggle-active {
+  background-color: #047857;
+  color: #ffffff;
+}
+
+html.dark [data-panel="split-form"] .split-form-toggle-active,
+html[data-theme="dark"] [data-panel="split-form"] .split-form-toggle-active {
+  background-color: #10b981;
+  color: #022c22;
+}
+
+[data-panel="split-form"] .split-form-table-head {
+  background-color: var(--split-section-bg);
+}
+
 :focus-visible {
   outline: 2px solid #047857;
   outline-offset: 2px;

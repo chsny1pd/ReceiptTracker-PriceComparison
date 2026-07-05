@@ -64,9 +64,15 @@ function percentageToAmount(percentValue: string | undefined, baseAmount: number
   return roundMoney((parsed / 100) * baseAmount);
 }
 
-const sectionClassName = "space-y-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4";
+const sectionClassName =
+  "split-form-section space-y-4 rounded-2xl border border-slate-200 p-4";
+const insetClassName = "split-form-inset rounded-2xl px-4 py-4 shadow-sm";
 const inputClassName =
   "h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-emerald-500";
+const toggleActiveClassName =
+  "split-form-toggle-active inline-flex h-10 items-center rounded-full bg-emerald-700 px-4 text-sm font-medium text-white transition";
+const toggleIdleClassName =
+  "split-form-toggle-idle inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium transition hover:border-slate-400";
 
 export function SplitForm({
   receiptId,
@@ -375,39 +381,37 @@ export function SplitForm({
   }
 
   return (
-    <section className="rounded-3xl border border-slate-300 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-200 pb-5">
+    <section
+      data-panel="split-form"
+      className="split-form-shell overflow-hidden rounded-3xl border bg-white shadow-sm"
+    >
+      <div className="split-form-header flex flex-col gap-3 border-b border-slate-200 px-5 py-5">
         <h2 className="text-xl font-semibold">{dict.splits.createExpenseSplit}</h2>
         <p className="text-sm text-slate-600">{dict.splits.payerRules}</p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setMode("detailed")}
-            className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition ${
-              mode === "detailed"
-                ? "bg-emerald-700 text-white"
-                : "border border-slate-300 text-slate-700 hover:border-slate-400"
-            }`}
+            className={
+              mode === "detailed" ? toggleActiveClassName : toggleIdleClassName
+            }
           >
             {dict.splits.detailedMode}
           </button>
           <button
             type="button"
             onClick={() => setMode("quick")}
-            className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition ${
-              mode === "quick"
-                ? "bg-slate-950 text-white"
-                : "border border-slate-300 text-slate-700 hover:border-slate-400"
-            }`}
+            className={mode === "quick" ? toggleActiveClassName : toggleIdleClassName}
           >
             {dict.splits.quickMode}
           </button>
         </div>
       </div>
 
+      <div className="p-5">
       <PendingNotice show={isPending} message={dict.splits.creatingSplit} />
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-6" aria-busy={isPending}>
+      <form onSubmit={handleSubmit} className="space-y-6" aria-busy={isPending}>
         <FormErrorSummary message={error} />
 
         <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -421,7 +425,7 @@ export function SplitForm({
                   {dict.splits.participantChooserHelp}
                 </p>
               </div>
-              <div className="rounded-xl bg-white px-3 py-2 text-right shadow-sm">
+              <div className={`${insetClassName} text-right`}>
                 <p className="text-xs uppercase tracking-wide text-slate-500">
                   {dict.splits.selectedCount}
                 </p>
@@ -441,7 +445,7 @@ export function SplitForm({
               />
             </label>
 
-            <div className="max-h-72 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
+            <div className="split-form-inset max-h-72 space-y-2 overflow-y-auto rounded-2xl p-3">
               {filteredProfiles.map((profile) => (
                 <label
                   key={profile.id}
@@ -512,14 +516,14 @@ export function SplitForm({
                 ))}
               </select>
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-600">
+              <div className="split-form-inset rounded-2xl border-dashed px-4 py-4 text-sm text-slate-600">
                 <p className="font-medium text-slate-900">{dict.splits.noSavedMethod}</p>
                 <p className="mt-1">{dict.splits.noSavedMethodBody}</p>
               </div>
             )}
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-white px-4 py-4 shadow-sm">
+              <div className={insetClassName}>
                 <p className="text-xs uppercase tracking-wide text-slate-500">
                   {dict.splits.splitTotal}
                 </p>
@@ -527,7 +531,7 @@ export function SplitForm({
                   {formatMoney(receiptTotal)}
                 </p>
               </div>
-              <div className="rounded-2xl bg-white px-4 py-4 shadow-sm">
+              <div className={insetClassName}>
                 <p className="text-xs uppercase tracking-wide text-slate-500">
                   {dict.splits.itemsInReceipt}
                 </p>
@@ -609,22 +613,22 @@ export function SplitForm({
                     <button
                       type="button"
                       onClick={() => setQuickAllocationUnit("amount")}
-                      className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition ${
+                      className={
                         quickAllocationUnit === "amount"
-                          ? "bg-emerald-700 text-white"
-                          : "border border-slate-300 text-slate-700"
-                      }`}
+                          ? toggleActiveClassName
+                          : toggleIdleClassName
+                      }
                     >
                       {dict.splits.byAmount}
                     </button>
                     <button
                       type="button"
                       onClick={() => setQuickAllocationUnit("percent")}
-                      className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition ${
+                      className={
                         quickAllocationUnit === "percent"
-                          ? "bg-emerald-700 text-white"
-                          : "border border-slate-300 text-slate-700"
-                      }`}
+                          ? toggleActiveClassName
+                          : toggleIdleClassName
+                      }
                     >
                       {dict.splits.byPercent}
                     </button>
@@ -632,7 +636,7 @@ export function SplitForm({
                 </fieldset>
               ) : null}
 
-              <div className="rounded-2xl bg-white px-4 py-4 shadow-sm">
+              <div className={insetClassName}>
                 <p className="text-sm font-medium">{dict.splits.splitTotal}</p>
                 <p className="mt-1 tabular-nums text-slate-700">
                   {formatMoney(targetAmount)}
@@ -747,7 +751,7 @@ export function SplitForm({
                   {dict.splits.allocateByItemBody}
                 </p>
               </div>
-              <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
+              <div className={insetClassName}>
                 <p className="text-xs uppercase tracking-wide text-slate-500">
                   {dict.splits.payerShare}
                 </p>
@@ -765,22 +769,22 @@ export function SplitForm({
                 <button
                   type="button"
                   onClick={() => setDetailedAllocationUnit("amount")}
-                  className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition ${
+                  className={
                     detailedAllocationUnit === "amount"
-                      ? "bg-emerald-700 text-white"
-                      : "border border-slate-300 text-slate-700"
-                  }`}
+                      ? toggleActiveClassName
+                      : toggleIdleClassName
+                  }
                 >
                   {dict.splits.byAmount}
                 </button>
                 <button
                   type="button"
                   onClick={() => setDetailedAllocationUnit("percent")}
-                  className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition ${
+                  className={
                     detailedAllocationUnit === "percent"
-                      ? "bg-emerald-700 text-white"
-                      : "border border-slate-300 text-slate-700"
-                  }`}
+                      ? toggleActiveClassName
+                      : toggleIdleClassName
+                  }
                 >
                   {dict.splits.byPercent}
                 </button>
@@ -793,13 +797,13 @@ export function SplitForm({
             </fieldset>
 
             {selectedParticipantProfiles.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-600">
+              <div className="split-form-inset rounded-2xl border-dashed px-4 py-8 text-center text-sm text-slate-600">
                 {dict.splits.selectParticipantsFirst}
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+              <div className="split-form-inset overflow-x-auto rounded-2xl">
                 <table className="min-w-full text-left text-sm">
-                  <thead className="border-b border-slate-200 bg-slate-50">
+                  <thead className="split-form-table-head border-b border-slate-200">
                     <tr>
                       <th className="px-4 py-3 font-medium">{dict.splits.lineItem}</th>
                       <th className="px-4 py-3 font-medium">{dict.common.total}</th>
@@ -860,7 +864,7 @@ export function SplitForm({
                         </td>
                       </tr>
                     ))}
-                    <tr className="bg-slate-50">
+                    <tr className="split-form-section">
                       <td className="px-4 py-4 font-medium">
                         {dict.splits.participantTotals}
                       </td>
@@ -913,6 +917,7 @@ export function SplitForm({
           </button>
         </div>
       </form>
+      </div>
     </section>
   );
 }

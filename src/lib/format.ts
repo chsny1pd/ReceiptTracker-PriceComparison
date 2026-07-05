@@ -1,9 +1,9 @@
 import type { SpendlyUnit } from "@/lib/types";
 
 export function formatMoney(amount: number) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("th-TH", {
     style: "currency",
-    currency: "USD",
+    currency: "THB",
   }).format(amount);
 }
 

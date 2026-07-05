@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <circle cx="16" cy="16" r="15" fill="#047857" stroke="#065f46" stroke-width="1.5"/>
+  <circle cx="16" cy="16" r="12.5" fill="#10b981" stroke="#059669" stroke-width="0.75"/>
+  <ellipse cx="13" cy="11.5" rx="5" ry="3" fill="#34d399" opacity="0.35"/>
+  <text
+    x="16"
+    y="21"
+    text-anchor="middle"
+    font-family="system-ui, sans-serif"
+    font-size="14"
+    font-weight="700"
+    fill="#ecfdf5"
+  >?</text>
+</svg>
