@@ -85,7 +85,14 @@ For production, also add:
 https://<vercel-domain>/auth/callback
 ```
 
-4. Run `supabase/schema.sql` in Supabase SQL editor.
+4. Run `supabase/schema.sql` in Supabase SQL editor for a new project.
+
+   For an existing database, run `supabase/rbac-migration.sql` instead, then promote your account:
+
+   ```sql
+   update public.profiles set role = 'admin' where github_username = 'YOUR_GITHUB_USERNAME';
+   ```
+
 5. Confirm tables exist:
 
 ```text

@@ -1,5 +1,6 @@
 export type SpendlyUnit = "g" | "kg" | "ml" | "l" | "each";
 export type SpendlyUnitCategory = "mass" | "volume" | "each";
+export type SpendlyUserRole = "user" | "staff" | "admin";
 export type SpendlyShareStatus =
   | "unpaid"
   | "submitted"
@@ -78,6 +79,24 @@ export type ProfileOption = {
   id: string;
   github_username: string | null;
   display_name: string | null;
+};
+
+export type AdminProfileRow = ProfileOption & {
+  role: SpendlyUserRole;
+  created_at: string;
+};
+
+export type AdminReceiptRow = {
+  id: string;
+  purchased_at: string;
+  total: number;
+  title: string | null;
+  owner_user_id: string;
+  stores: { name: string } | null;
+  owner: {
+    display_name: string | null;
+    github_username: string | null;
+  } | null;
 };
 
 export type ReceiptSplitSummary = {

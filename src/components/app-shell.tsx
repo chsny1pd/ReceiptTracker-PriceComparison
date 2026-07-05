@@ -3,6 +3,8 @@
 import Link from "next/link";
 
 import { useAppPreferences } from "@/components/app-preferences-provider";
+import { canAccessAdminArea } from "@/lib/rbac";
+import type { SpendlyUserRole } from "@/lib/types";
 
 const navItems = [
   { href: "/dashboard", key: "dashboard" as const },
@@ -16,10 +18,17 @@ type AppShellProps = {
   children: React.ReactNode;
   avatarUrl: string | null;
   displayName: string;
+  role: SpendlyUserRole | null;
 };
 
-export function AppShell({ children, avatarUrl, displayName }: AppShellProps) {
+export function AppShell({
+  children,
+  avatarUrl,
+  displayName,
+  role,
+}: AppShellProps) {
   const { dict, locale, setLocale, theme, setTheme } = useAppPreferences();
+  const showAdminNav = canAccessAdminArea(role);
   const initials = displayName
     .split(/\s+/)
     .slice(0, 2)
@@ -47,6 +56,14 @@ export function AppShell({ children, avatarUrl, displayName }: AppShellProps) {
                   {dict.nav[item.key]}
                 </Link>
               ))}
+              {showAdminNav ? (
+                <Link
+                  href="/admin"
+                  className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                >
+                  {dict.nav.admin}
+                </Link>
+              ) : null}
             </nav>
           </div>
           <div className="flex flex-wrap items-center gap-3">

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
-import { getOptionalUserContext } from "@/lib/auth";
+import { getOptionalUserContext, getUserWithRole } from "@/lib/auth";
 import { profileLabel } from "@/lib/supabase-helpers";
 
 export default async function AppLayout({
@@ -14,6 +14,8 @@ export default async function AppLayout({
   if (!user) {
     redirect("/login");
   }
+
+  const { role } = await getUserWithRole();
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -34,7 +36,7 @@ export default async function AppLayout({
   );
 
   return (
-    <AppShell avatarUrl={avatarUrl} displayName={displayName}>
+    <AppShell avatarUrl={avatarUrl} displayName={displayName} role={role}>
       {children}
     </AppShell>
   );

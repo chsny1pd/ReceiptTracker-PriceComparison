@@ -1,9 +1,15 @@
 import type { NextRequest } from "next/server";
 
-import { updateSession } from "@/lib/supabase/middleware";
+import {
+  enforceAdminRouteAccess,
+  updateSession,
+} from "@/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
-  return updateSession(request);
+  const { response, userId, role } = await updateSession(request);
+  const accessResponse = enforceAdminRouteAccess(request, userId, role);
+
+  return accessResponse ?? response;
 }
 
 export const config = {
