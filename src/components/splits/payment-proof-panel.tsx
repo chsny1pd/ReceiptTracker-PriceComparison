@@ -8,9 +8,9 @@ import {
 } from "@/app/actions/payment-proofs";
 import { useAppPreferences } from "@/components/app-preferences-provider";
 import { FormErrorSummary } from "@/components/form-error-summary";
-import { PaymentProofImageLink } from "@/components/payment-proof-image-link";
+import { PaymentProofImage } from "@/components/payment-proof-image";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
-import { compressImageIfNeeded } from "@/lib/client-image";
+import { prepareClientUpload } from "@/lib/client-upload";
 import { formatDate } from "@/lib/format";
 import type { SharePaymentProof, SplitShareDetail, UserPaymentMethod } from "@/lib/types";
 
@@ -59,6 +59,7 @@ export function PaymentProofPanel({
   const [imageObjectKey, setImageObjectKey] = useState("");
   const [imageName, setImageName] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewContentType, setPreviewContentType] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputId = `payment-slip-${share.id}`;
   const panelId = `share-payment-${share.id}`;
@@ -75,6 +76,7 @@ export function PaymentProofPanel({
       URL.revokeObjectURL(previewUrl);
     }
     setPreviewUrl(null);
+    setPreviewContentType(null);
     setImageObjectKey("");
     setImageName(null);
   }
@@ -84,21 +86,22 @@ export function PaymentProofPanel({
       URL.revokeObjectURL(previewUrl);
     }
     setPreviewUrl(URL.createObjectURL(file));
+    setPreviewContentType(file.type);
     setUploading(true);
     setError(null);
 
     try {
-      const compressed = await compressImageIfNeeded(file, {
+      const uploadFile = await prepareClientUpload(file, {
         maxDimension: 1800,
-        maxBytes: 5 * 1024 * 1024,
-        preferredType: "image/webp",
+        invalidTypeMessage: dict.common.uploadInvalidType,
+        tooLargeMessage: dict.common.uploadTooLarge,
       });
       const presignResponse = await fetch("/api/payment-proofs/presign", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          contentType: compressed.type,
-          fileSize: compressed.size,
+          contentType: uploadFile.type,
+          fileSize: uploadFile.size,
         }),
       });
       const presignPayload = (await presignResponse.json()) as {
@@ -114,9 +117,9 @@ export function PaymentProofPanel({
       const uploadResponse = await fetch(presignPayload.uploadUrl, {
         method: "PUT",
         headers: {
-          "content-type": compressed.type,
+          "content-type": uploadFile.type,
         },
-        body: compressed,
+        body: uploadFile,
       });
 
       if (!uploadResponse.ok) {
@@ -124,7 +127,8 @@ export function PaymentProofPanel({
       }
 
       setImageObjectKey(presignPayload.objectKey);
-      setImageName(compressed.name);
+      setImageName(uploadFile.name);
+      setPreviewContentType(uploadFile.type);
     } catch (uploadError) {
       clearSelectedImage();
       setError(
@@ -287,13 +291,17 @@ export function PaymentProofPanel({
               disabled={isPending}
               uploading={uploading}
               previewUrl={previewUrl}
+              previewContentType={previewContentType}
               imageName={imageName}
               onFileSelect={(file) => void handleUpload(file)}
               onRemove={clearSelectedImage}
+              onValidationError={setError}
               chooseLabel={dict.splits.chooseSlip}
               replaceLabel={dict.splits.replaceSlip}
               uploadingLabel={dict.splits.uploadingSlip}
               removeLabel={dict.common.removeImage}
+              invalidTypeMessage={dict.common.uploadInvalidType}
+              tooLargeMessage={dict.common.uploadTooLarge}
               helpText={dict.splits.compressionHelp}
               selectedHelpText={dict.splits.slipSelectedHelp}
             />
@@ -334,9 +342,10 @@ export function PaymentProofPanel({
             <p className="mt-2 text-sm text-slate-600">{latestProof.note}</p>
           ) : null}
           <div className="mt-3">
-            <PaymentProofImageLink
+            <PaymentProofImage
               proofId={latestProof.id}
-              label={dict.splits.openUploadedProof}
+              alt={dict.splits.uploadedProofAlt}
+              loadingLabel={dict.splits.loadingProofImage}
             />
           </div>
 

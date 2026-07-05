@@ -2,36 +2,50 @@
 
 import { useEffect, useRef } from "react";
 
+import { UploadedFilePreview } from "@/components/ui/uploaded-file-preview";
+import {
+  UPLOAD_ACCEPT,
+  validateSelectedUploadFile,
+} from "@/lib/upload-validation";
+
 type ImageUploadFieldProps = {
   fileInputId: string;
   accept?: string;
   disabled?: boolean;
   uploading?: boolean;
   previewUrl: string | null;
+  previewContentType?: string | null;
   imageName: string | null;
   onFileSelect: (file: File) => void;
   onRemove: () => void;
+  onValidationError?: (message: string) => void;
   chooseLabel: string;
   replaceLabel: string;
   uploadingLabel: string;
   removeLabel: string;
+  invalidTypeMessage: string;
+  tooLargeMessage: string;
   helpText?: string;
   selectedHelpText?: string;
 };
 
 export function ImageUploadField({
   fileInputId,
-  accept = "image/jpeg,image/png,image/webp",
+  accept = UPLOAD_ACCEPT,
   disabled = false,
   uploading = false,
   previewUrl,
+  previewContentType = null,
   imageName,
   onFileSelect,
   onRemove,
+  onValidationError,
   chooseLabel,
   replaceLabel,
   uploadingLabel,
   removeLabel,
+  invalidTypeMessage,
+  tooLargeMessage,
   helpText,
   selectedHelpText,
 }: ImageUploadFieldProps) {
@@ -52,13 +66,36 @@ export function ImageUploadField({
     }
   }
 
+  function handleFileChange(file: File) {
+    const validationError = validateSelectedUploadFile(file);
+
+    if (validationError === "invalidType") {
+      onValidationError?.(invalidTypeMessage);
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+      return;
+    }
+
+    if (validationError === "tooLarge") {
+      onValidationError?.(tooLargeMessage);
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+      return;
+    }
+
+    onFileSelect(file);
+  }
+
   return (
     <div className="space-y-3">
       {previewUrl ? (
         <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-50">
-          <img
-            src={previewUrl}
-            alt={imageName ?? "Selected image preview"}
+          <UploadedFilePreview
+            url={previewUrl}
+            contentType={previewContentType ?? "image/jpeg"}
+            alt={imageName ?? "Selected upload preview"}
             className="max-h-64 w-full object-contain"
           />
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
@@ -98,7 +135,7 @@ export function ImageUploadField({
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) {
-            onFileSelect(file);
+            handleFileChange(file);
           }
         }}
         className="sr-only"

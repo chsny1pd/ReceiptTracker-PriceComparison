@@ -16,7 +16,7 @@ import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { PendingNotice } from "@/components/ui/pending-notice";
 import { Spinner } from "@/components/ui/spinner";
 import { consumeCompareCartReceiptDraft } from "@/lib/compare-cart";
-import { compressImageIfNeeded } from "@/lib/client-image";
+import { prepareClientUpload } from "@/lib/client-upload";
 import { formatMoney, formatUnitPrice } from "@/lib/format";
 import {
   blankReceiptDraftPayload,
@@ -47,6 +47,7 @@ type DraftLine = {
   imageObjectKey: string | null;
   imageName: string | null;
   imagePreviewUrl: string | null;
+  imagePreviewContentType: string | null;
 };
 
 type ReceiptFormProps = {
@@ -68,6 +69,7 @@ function emptyLine(products: Product[]): DraftLine {
     imageObjectKey: null,
     imageName: null,
     imagePreviewUrl: null,
+    imagePreviewContentType: null,
   };
 }
 
@@ -82,6 +84,7 @@ function lineFromDraft(line: ReceiptDraftLine): DraftLine {
     imageObjectKey: line.imageObjectKey,
     imageName: line.imageName,
     imagePreviewUrl: null,
+    imagePreviewContentType: null,
   };
 }
 
@@ -112,6 +115,7 @@ function draftLineToState(
     imageObjectKey: null,
     imageName: null,
     imagePreviewUrl: null,
+    imagePreviewContentType: null,
   }));
 }
 
@@ -157,6 +161,9 @@ export function ReceiptForm({
     effectiveInitialDraft?.imageName ?? null,
   );
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imagePreviewContentType, setImagePreviewContentType] = useState<string | null>(
+    null,
+  );
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingLineKey, setUploadingLineKey] = useState<string | null>(null);
   const [lines, setLines] = useState<DraftLine[]>(() => {
@@ -321,6 +328,7 @@ export function ReceiptForm({
           imageObjectKey: null,
           imageName: null,
           imagePreviewUrl: null,
+          imagePreviewContentType: null,
         },
       ]);
     }
@@ -329,18 +337,12 @@ export function ReceiptForm({
     router.refresh();
   }
 
-  async function prepareUploadFile(file: File, maxDimension: number) {
-    return compressImageIfNeeded(file, {
-      maxDimension,
-      maxBytes: 4.5 * 1024 * 1024,
-    });
-  }
-
   function clearReceiptImage() {
     if (imagePreviewUrl?.startsWith("blob:")) {
       URL.revokeObjectURL(imagePreviewUrl);
     }
     setImagePreviewUrl(null);
+    setImagePreviewContentType(null);
     setImageObjectKey(null);
     setImageName(null);
   }
@@ -355,17 +357,22 @@ export function ReceiptForm({
       URL.revokeObjectURL(imagePreviewUrl);
     }
     setImagePreviewUrl(URL.createObjectURL(file));
+    setImagePreviewContentType(file.type);
     setUploadingImage(true);
     setError(null);
 
     try {
-      const compressedFile = await prepareUploadFile(file, 1800);
+      const uploadFile = await prepareClientUpload(file, {
+        maxDimension: 1800,
+        invalidTypeMessage: dict.common.uploadInvalidType,
+        tooLargeMessage: dict.common.uploadTooLarge,
+      });
       const presignResponse = await fetch("/api/receipt-images/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contentType: compressedFile.type,
-          fileSize: compressedFile.size,
+          contentType: uploadFile.type,
+          fileSize: uploadFile.size,
         }),
       });
       const presignPayload = (await presignResponse.json()) as {
@@ -380,8 +387,8 @@ export function ReceiptForm({
 
       const uploadResponse = await fetch(presignPayload.uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": compressedFile.type },
-        body: compressedFile,
+        headers: { "Content-Type": uploadFile.type },
+        body: uploadFile,
       });
 
       if (!uploadResponse.ok) {
@@ -389,7 +396,8 @@ export function ReceiptForm({
       }
 
       setImageObjectKey(presignPayload.objectKey ?? null);
-      setImageName(compressedFile.name);
+      setImageName(uploadFile.name);
+      setImagePreviewContentType(uploadFile.type);
     } catch (uploadError) {
       clearReceiptImage();
       setError(
@@ -411,6 +419,7 @@ export function ReceiptForm({
       imageObjectKey: null,
       imageName: null,
       imagePreviewUrl: null,
+      imagePreviewContentType: null,
     });
   }
 
@@ -426,18 +435,23 @@ export function ReceiptForm({
     }
     updateLine(lineKey, {
       imagePreviewUrl: URL.createObjectURL(file),
+      imagePreviewContentType: file.type,
     });
     setUploadingLineKey(lineKey);
     setError(null);
 
     try {
-      const compressedFile = await prepareUploadFile(file, 1600);
+      const uploadFile = await prepareClientUpload(file, {
+        maxDimension: 1600,
+        invalidTypeMessage: dict.common.uploadInvalidType,
+        tooLargeMessage: dict.common.uploadTooLarge,
+      });
       const presignResponse = await fetch("/api/item-images/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contentType: compressedFile.type,
-          fileSize: compressedFile.size,
+          contentType: uploadFile.type,
+          fileSize: uploadFile.size,
         }),
       });
       const presignPayload = (await presignResponse.json()) as {
@@ -454,8 +468,8 @@ export function ReceiptForm({
 
       const uploadResponse = await fetch(presignPayload.uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": compressedFile.type },
-        body: compressedFile,
+        headers: { "Content-Type": uploadFile.type },
+        body: uploadFile,
       });
 
       if (!uploadResponse.ok) {
@@ -464,7 +478,8 @@ export function ReceiptForm({
 
       updateLine(lineKey, {
         imageObjectKey: presignPayload.objectKey ?? null,
-        imageName: compressedFile.name,
+        imageName: uploadFile.name,
+        imagePreviewContentType: uploadFile.type,
       });
     } catch (uploadError) {
       clearLineImage(lineKey);
@@ -653,13 +668,17 @@ export function ReceiptForm({
                 disabled={isPending}
                 uploading={uploadingImage}
                 previewUrl={imagePreviewUrl}
+                previewContentType={imagePreviewContentType}
                 imageName={imageName}
                 onFileSelect={(file) => void handleImageChange(file)}
                 onRemove={clearReceiptImage}
+                onValidationError={setError}
                 chooseLabel={dict.receipts.chooseReceiptImage}
                 replaceLabel={dict.receipts.replaceReceiptImage}
                 uploadingLabel={dict.receipts.compressingUpload}
                 removeLabel={dict.common.removeImage}
+                invalidTypeMessage={dict.common.uploadInvalidType}
+                tooLargeMessage={dict.common.uploadTooLarge}
                 helpText={dict.receipts.receiptImageHelp}
               />
             </div>
@@ -840,13 +859,17 @@ export function ReceiptForm({
                         disabled={isPending}
                         uploading={uploadingLineKey === line.key}
                         previewUrl={line.imagePreviewUrl}
+                        previewContentType={line.imagePreviewContentType}
                         imageName={line.imageName}
                         onFileSelect={(file) => void handleLineImageChange(line.key, file)}
                         onRemove={() => clearLineImage(line.key)}
+                        onValidationError={setError}
                         chooseLabel={dict.receipts.chooseItemImage}
                         replaceLabel={dict.receipts.replaceItemImage}
                         uploadingLabel={dict.receipts.compressingUpload}
                         removeLabel={dict.common.removeImage}
+                        invalidTypeMessage={dict.common.uploadInvalidType}
+                        tooLargeMessage={dict.common.uploadTooLarge}
                         helpText={dict.receipts.itemImageHelp}
                       />
                     </div>

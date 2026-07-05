@@ -9,9 +9,7 @@ import {
   getR2BucketName,
 } from "@/lib/r2";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-const maxImageBytes = 5 * 1024 * 1024;
-const allowedContentTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+import { validatePresignRequest } from "@/lib/upload-validation";
 
 export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
@@ -28,21 +26,12 @@ export async function POST(request: Request) {
     fileSize?: number;
   };
 
-  if (!body.contentType || !allowedContentTypes.has(body.contentType)) {
-    return NextResponse.json(
-      { error: "Item image must be jpeg, png, or webp." },
-      { status: 400 },
-    );
+  const validationError = validatePresignRequest(body.contentType, body.fileSize);
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
-  if (!body.fileSize || body.fileSize <= 0 || body.fileSize > maxImageBytes) {
-    return NextResponse.json(
-      { error: "Item image must be 5MB or smaller." },
-      { status: 400 },
-    );
-  }
-
-  const extension = extensionForContentType(body.contentType);
+  const extension = extensionForContentType(body.contentType!);
   const objectKey = `receipt-items/${user.id}/${randomUUID()}.${extension}`;
   const command = new PutObjectCommand({
     Bucket: getR2BucketName(),

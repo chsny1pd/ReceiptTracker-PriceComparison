@@ -4,11 +4,17 @@ import { useEffect, useState } from "react";
 
 import { UploadedFilePreview } from "@/components/ui/uploaded-file-preview";
 
-type ReceiptImageProps = {
-  receiptId: string;
+type PaymentProofImageProps = {
+  proofId: string;
+  alt: string;
+  loadingLabel: string;
 };
 
-export function ReceiptImage({ receiptId }: ReceiptImageProps) {
+export function PaymentProofImage({
+  proofId,
+  alt,
+  loadingLabel,
+}: PaymentProofImageProps) {
   const [viewUrl, setViewUrl] = useState<string | null>(null);
   const [contentType, setContentType] = useState("image/jpeg");
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +23,7 @@ export function ReceiptImage({ receiptId }: ReceiptImageProps) {
     let cancelled = false;
 
     async function loadImage() {
-      const response = await fetch(`/api/receipt-images/${receiptId}`);
+      const response = await fetch(`/api/payment-proofs/${proofId}`);
       const payload = (await response.json()) as {
         viewUrl?: string;
         contentType?: string;
@@ -29,7 +35,7 @@ export function ReceiptImage({ receiptId }: ReceiptImageProps) {
       }
 
       if (!response.ok || !payload.viewUrl) {
-        setError(payload.error ?? "Could not load receipt image.");
+        setError(payload.error ?? "Could not load payment proof.");
         return;
       }
 
@@ -42,11 +48,11 @@ export function ReceiptImage({ receiptId }: ReceiptImageProps) {
     return () => {
       cancelled = true;
     };
-  }, [receiptId]);
+  }, [proofId]);
 
   if (error) {
     return (
-      <p className="rounded-lg border border-slate-300 bg-white p-4 text-sm text-slate-600">
+      <p className="rounded-lg border border-slate-300 bg-white p-4 text-sm text-red-600">
         {error}
       </p>
     );
@@ -55,16 +61,12 @@ export function ReceiptImage({ receiptId }: ReceiptImageProps) {
   if (!viewUrl) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-        Loading receipt image...
+        {loadingLabel}
       </div>
     );
   }
 
   return (
-    <UploadedFilePreview
-      url={viewUrl}
-      contentType={contentType}
-      alt="Receipt"
-    />
+    <UploadedFilePreview url={viewUrl} contentType={contentType} alt={alt} />
   );
 }

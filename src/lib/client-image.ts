@@ -55,7 +55,7 @@ export async function compressImageIfNeeded(
   }
 
   if (!blob || blob.size > options.maxBytes) {
-    throw new Error("Compressed image is still too large.");
+    throw new Error("Compressed image is still too large. Upload must be 1 MB or smaller.");
   }
 
   const outputType = blob.type || preferredType;

@@ -8,7 +8,8 @@ import {
 } from "@/app/actions/payment-methods";
 import { useAppPreferences } from "@/components/app-preferences-provider";
 import { FormErrorSummary } from "@/components/form-error-summary";
-import { compressImageIfNeeded } from "@/lib/client-image";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
+import { prepareClientUpload } from "@/lib/client-upload";
 import type { UserPaymentMethod } from "@/lib/types";
 
 type PaymentMethodsManagerProps = {
@@ -33,24 +34,42 @@ export function PaymentMethodsManager({
   const [isDefault, setIsDefault] = useState(methods.length === 0);
   const [qrImageObjectKey, setQrImageObjectKey] = useState("");
   const [qrImageName, setQrImageName] = useState<string | null>(null);
+  const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
+  const [qrPreviewContentType, setQrPreviewContentType] = useState<string | null>(null);
   const [uploadingQr, setUploadingQr] = useState(false);
+  const qrFileInputId = "payment-method-qr";
+
+  function clearSelectedQr() {
+    if (qrPreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(qrPreviewUrl);
+    }
+    setQrPreviewUrl(null);
+    setQrPreviewContentType(null);
+    setQrImageObjectKey("");
+    setQrImageName(null);
+  }
 
   async function handleQrUpload(file: File) {
+    if (qrPreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(qrPreviewUrl);
+    }
+    setQrPreviewUrl(URL.createObjectURL(file));
+    setQrPreviewContentType(file.type);
     setError(null);
     setUploadingQr(true);
 
     try {
-      const compressed = await compressImageIfNeeded(file, {
+      const uploadFile = await prepareClientUpload(file, {
         maxDimension: 1400,
-        maxBytes: 3 * 1024 * 1024,
-        preferredType: "image/webp",
+        invalidTypeMessage: dict.common.uploadInvalidType,
+        tooLargeMessage: dict.common.uploadTooLarge,
       });
       const presignResponse = await fetch("/api/payment-method-images/presign", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          contentType: compressed.type,
-          fileSize: compressed.size,
+          contentType: uploadFile.type,
+          fileSize: uploadFile.size,
         }),
       });
       const presignPayload = (await presignResponse.json()) as {
@@ -66,9 +85,9 @@ export function PaymentMethodsManager({
       const uploadResponse = await fetch(presignPayload.uploadUrl, {
         method: "PUT",
         headers: {
-          "content-type": compressed.type,
+          "content-type": uploadFile.type,
         },
-        body: compressed,
+        body: uploadFile,
       });
 
       if (!uploadResponse.ok) {
@@ -76,8 +95,10 @@ export function PaymentMethodsManager({
       }
 
       setQrImageObjectKey(presignPayload.objectKey);
-      setQrImageName(compressed.name);
+      setQrImageName(uploadFile.name);
+      setQrPreviewContentType(uploadFile.type);
     } catch (uploadError) {
+      clearSelectedQr();
       setError(
         uploadError instanceof Error ? uploadError.message : "QR upload failed.",
       );
@@ -94,8 +115,7 @@ export function PaymentMethodsManager({
     setPromptpayId("");
     setNote("");
     setIsDefault(methods.length === 0);
-    setQrImageObjectKey("");
-    setQrImageName(null);
+    clearSelectedQr();
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -178,28 +198,28 @@ export function PaymentMethodsManager({
                 onChange={(event) => setPromptpayId(event.target.value)}
               />
             </label>
-            <label className="grid gap-2 text-sm">
-              <span className="font-medium">{dict.settings.qr}</span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) {
-                    void handleQrUpload(file);
-                  }
-                }}
-                className="text-sm"
-                disabled={uploadingQr}
+            <div className="md:col-span-2">
+              <p className="mb-2 text-sm font-medium">{dict.settings.qr}</p>
+              <ImageUploadField
+                fileInputId={qrFileInputId}
+                disabled={isPending}
+                uploading={uploadingQr}
+                previewUrl={qrPreviewUrl}
+                previewContentType={qrPreviewContentType}
+                imageName={qrImageName}
+                onFileSelect={(file) => void handleQrUpload(file)}
+                onRemove={clearSelectedQr}
+                onValidationError={setError}
+                chooseLabel={dict.settings.chooseQr}
+                replaceLabel={dict.settings.replaceQr}
+                uploadingLabel={dict.settings.uploadingQr}
+                removeLabel={dict.common.removeImage}
+                invalidTypeMessage={dict.common.uploadInvalidType}
+                tooLargeMessage={dict.common.uploadTooLarge}
+                helpText={dict.settings.qrOptionalHelp}
+                selectedHelpText={dict.settings.qrSelectedHelp}
               />
-              <span className="text-xs text-slate-500">
-                {uploadingQr
-                  ? dict.settings.uploadingQr
-                  : qrImageName
-                    ? `${dict.common.uploaded}: ${qrImageName}`
-                    : dict.settings.qrOptionalHelp}
-              </span>
-            </label>
+            </div>
           </div>
 
           <label className="grid gap-2 text-sm">

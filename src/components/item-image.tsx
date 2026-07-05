@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { UploadedFilePreview } from "@/components/ui/uploaded-file-preview";
+
 type ItemImageProps = {
   itemId: string;
   alt: string;
@@ -9,6 +11,7 @@ type ItemImageProps = {
 
 export function ItemImage({ itemId, alt }: ItemImageProps) {
   const [viewUrl, setViewUrl] = useState<string | null>(null);
+  const [contentType, setContentType] = useState("image/jpeg");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -18,6 +21,7 @@ export function ItemImage({ itemId, alt }: ItemImageProps) {
       const response = await fetch(`/api/item-images/${itemId}`);
       const payload = (await response.json()) as {
         viewUrl?: string;
+        contentType?: string;
         error?: string;
       };
 
@@ -31,6 +35,7 @@ export function ItemImage({ itemId, alt }: ItemImageProps) {
       }
 
       setViewUrl(payload.viewUrl);
+      setContentType(payload.contentType ?? "image/jpeg");
     }
 
     void loadImage();
@@ -57,8 +62,9 @@ export function ItemImage({ itemId, alt }: ItemImageProps) {
   }
 
   return (
-    <img
-      src={viewUrl}
+    <UploadedFilePreview
+      url={viewUrl}
+      contentType={contentType}
       alt={alt}
       className="max-h-48 w-full rounded-lg border border-slate-200 bg-white object-contain"
     />

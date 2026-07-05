@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { createR2Client, getR2BucketName } from "@/lib/r2";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { contentTypeFromObjectKey } from "@/lib/upload-validation";
 
 type RouteContext = {
   params: Promise<{
@@ -40,5 +41,8 @@ export async function GET(_request: Request, context: RouteContext) {
     expiresIn: 300,
   });
 
-  return NextResponse.json({ viewUrl });
+  return NextResponse.json({
+    viewUrl,
+    contentType: contentTypeFromObjectKey(receipt.image_object_key),
+  });
 }

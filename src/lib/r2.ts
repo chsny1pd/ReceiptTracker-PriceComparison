@@ -20,6 +20,10 @@ export function getR2BucketName() {
 }
 
 export function extensionForContentType(contentType: string) {
+  if (contentType === "application/pdf") {
+    return "pdf";
+  }
+
   if (contentType === "image/png") {
     return "png";
   }
