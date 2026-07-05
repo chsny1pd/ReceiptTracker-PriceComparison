@@ -4,8 +4,8 @@ import { deleteReceiptDraft } from "@/app/actions/drafts";
 import { PageHeader } from "@/components/page-header";
 import { getRequiredUser } from "@/lib/auth";
 import { formatDate, formatMoney } from "@/lib/format";
+import { receiptLabel } from "@/lib/receipt-label";
 import { getServerI18n } from "@/lib/server-preferences";
-import { relationName } from "@/lib/supabase-helpers";
 
 export default async function ReceiptsPage() {
   const { supabase, user } = await getRequiredUser();
@@ -14,7 +14,7 @@ export default async function ReceiptsPage() {
   const [{ data: receipts, error }, { data: drafts }] = await Promise.all([
     supabase
       .from("receipts")
-      .select("id, purchased_at, total, stores(name)")
+      .select("id, title, purchased_at, total, stores(name), receipt_items(raw_name, line_number)")
       .eq("owner_user_id", user.id)
       .order("purchased_at", { ascending: false }),
     supabase
@@ -42,7 +42,7 @@ export default async function ReceiptsPage() {
       <section className="mb-8 rounded-lg border border-slate-300 bg-white p-5">
         <h2 className="text-lg font-semibold">{dict.receipts.draftsTitle}</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Resume saved work from any signed-in device.
+          {dict.receipts.resumeSavedWork}
         </p>
         {!drafts || drafts.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">{dict.receipts.noDrafts}</p>
@@ -54,9 +54,9 @@ export default async function ReceiptsPage() {
                 className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <p className="font-medium">{draft.title ?? "Draft receipt"}</p>
+                  <p className="font-medium">{draft.title ?? dict.receipts.draftReceipt}</p>
                   <p className="text-sm text-slate-600">
-                    Updated {formatDate(draft.updated_at.slice(0, 10))}
+                    {dict.receipts.updatedOn} {formatDate(draft.updated_at.slice(0, 10))}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -103,17 +103,19 @@ export default async function ReceiptsPage() {
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <th className="px-4 py-3 font-medium">Store</th>
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Total</th>
-                <th className="px-4 py-3 font-medium">Action</th>
+                <th className="px-4 py-3 font-medium">{dict.settings.label}</th>
+                <th className="px-4 py-3 font-medium">
+                  {dict.receipts.purchaseDate}
+                </th>
+                <th className="px-4 py-3 font-medium">{dict.common.total}</th>
+                <th className="px-4 py-3 font-medium">{dict.common.action}</th>
               </tr>
             </thead>
             <tbody>
               {receipts.map((receipt) => (
                 <tr key={receipt.id} className="border-b border-slate-100">
                   <td className="px-4 py-3">
-                    {relationName(receipt.stores, "Unknown store")}
+                    {receiptLabel(receipt)}
                   </td>
                   <td className="px-4 py-3 tabular-nums">
                     {formatDate(receipt.purchased_at)}
@@ -126,7 +128,7 @@ export default async function ReceiptsPage() {
                       href={`/receipts/${receipt.id}`}
                       className="font-medium text-emerald-700"
                     >
-                      Open
+                      {dict.common.open}
                     </Link>
                   </td>
                 </tr>

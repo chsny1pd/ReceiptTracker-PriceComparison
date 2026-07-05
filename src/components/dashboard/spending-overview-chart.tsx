@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { useAppPreferences } from "@/components/app-preferences-provider";
 import { ReceiptCard, type ReceiptCardData } from "@/components/dashboard/receipt-card";
 import { Modal } from "@/components/ui/modal";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -65,6 +66,7 @@ function buildChartPoints(dailySpending: DailySpendingPoint[]): ChartPoint[] {
 export function SpendingOverviewChart({
   dailySpending,
 }: SpendingOverviewChartProps) {
+  const { dict } = useAppPreferences();
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const points = useMemo(
     () => buildChartPoints(dailySpending),
@@ -89,9 +91,9 @@ export function SpendingOverviewChart({
   if (dailySpending.length === 0) {
     return (
       <section className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
-        <h2 className="text-lg font-semibold">Spending overview</h2>
+        <h2 className="text-lg font-semibold">{dict.dashboard.spendingOverview}</h2>
         <p className="mt-2 text-sm text-slate-600">
-          Log receipts to see your daily spending trend.
+          {dict.dashboard.spendingOverviewEmpty}
         </p>
       </section>
     );
@@ -103,12 +105,12 @@ export function SpendingOverviewChart({
     <>
       <section
         className="rounded-lg border border-slate-300 bg-white p-5"
-        aria-label="Daily spending overview chart"
+        aria-label={dict.dashboard.spendingOverviewChartLabel}
       >
         <div>
-          <h2 className="text-lg font-semibold">Spending overview</h2>
+          <h2 className="text-lg font-semibold">{dict.dashboard.spendingOverview}</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Total spending per day. Click a point to see receipts for that day.
+            {dict.dashboard.dailySpendingDescription}
           </p>
         </div>
 
@@ -120,7 +122,7 @@ export function SpendingOverviewChart({
             aria-labelledby="spending-overview-chart-title"
           >
             <title id="spending-overview-chart-title">
-              Daily spending line chart
+              {dict.dashboard.dailySpendingLineChartTitle}
             </title>
 
             <line
@@ -156,7 +158,7 @@ export function SpendingOverviewChart({
               textAnchor="middle"
               className="fill-slate-600 text-[12px]"
             >
-              Purchase date
+              {dict.receipts.purchaseDate}
             </text>
             <text
               x={16}
@@ -165,7 +167,7 @@ export function SpendingOverviewChart({
               transform={`rotate(-90 16 ${HEIGHT / 2})`}
               className="fill-slate-600 text-[12px]"
             >
-              Daily total
+              {dict.dashboard.dailyTotalAxis}
             </text>
 
             {dailySpending.length > 1 ? (
@@ -205,7 +207,7 @@ export function SpendingOverviewChart({
         </div>
 
         <p className="mt-4 text-sm text-slate-500">
-          Click a point to open receipts for that day.
+          {dict.dashboard.clickPointToOpen}
         </p>
       </section>
 
@@ -214,20 +216,23 @@ export function SpendingOverviewChart({
         onClose={() => setSelectedIndex(null)}
         title={
           selectedPoint
-            ? `Receipts · ${formatDate(selectedPoint.date)}`
-            : "Receipts"
+            ? `${dict.dashboard.receiptsModalTitle} · ${formatDate(selectedPoint.date)}`
+            : dict.dashboard.receiptsModalTitle
         }
         panelClassName="max-w-2xl"
       >
         {selectedPoint ? (
           <div className="space-y-4">
             <p className="text-sm text-slate-600">
-              {selectedPoint.receipts.length} receipt
-              {selectedPoint.receipts.length === 1 ? "" : "s"} ·{" "}
+              {selectedPoint.receipts.length}{" "}
+              {selectedPoint.receipts.length === 1
+                ? dict.dashboard.receiptSingular
+                : dict.dashboard.receiptPlural}{" "}
+              ·{" "}
               <span className="font-medium tabular-nums text-slate-950">
                 {formatMoney(selectedPoint.total)}
               </span>{" "}
-              total
+              {dict.dashboard.totalSuffix}
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {selectedPoint.receipts.map((receipt) => (

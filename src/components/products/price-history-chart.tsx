@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { useAppPreferences } from "@/components/app-preferences-provider";
 import { formatDate, formatMoney, formatUnitPrice } from "@/lib/format";
 import type { ProductHistoryRow, SpendlyUnit } from "@/lib/types";
 
@@ -60,6 +61,7 @@ function buildChartPoints(rows: ProductHistoryRow[]): ChartPoint[] {
 }
 
 export function PriceHistoryChart({ rows, unit }: PriceHistoryChartProps) {
+  const { dict } = useAppPreferences();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const points = useMemo(() => buildChartPoints(rows), [rows]);
   const activePoint =
@@ -89,18 +91,18 @@ export function PriceHistoryChart({ rows, unit }: PriceHistoryChartProps) {
   return (
     <section
       className="rounded-lg border border-slate-300 bg-white p-5"
-      aria-label={`Price history chart in ${unit}`}
+      aria-label={dict.products.chartAriaLabel.replace("{unit}", unit)}
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Price trend</h2>
+          <h2 className="text-lg font-semibold">{dict.products.priceTrend}</h2>
           <p className="text-sm text-slate-600">
-            Normalized unit price ($ / {unit}) from your receipt entries only.
+            {dict.products.normalizedPriceFrom.replace("{unit}", unit)}
           </p>
         </div>
         {rows.length === 1 ? (
           <p className="text-sm text-slate-500">
-            Log another receipt to see a trend line.
+            {dict.products.logAnotherReceipt}
           </p>
         ) : null}
       </div>
@@ -113,7 +115,7 @@ export function PriceHistoryChart({ rows, unit }: PriceHistoryChartProps) {
           aria-labelledby="price-history-chart-title"
         >
           <title id="price-history-chart-title">
-            Product price history line chart
+            {dict.products.chartTitle}
           </title>
 
           <line
@@ -149,7 +151,7 @@ export function PriceHistoryChart({ rows, unit }: PriceHistoryChartProps) {
             textAnchor="middle"
             className="fill-slate-600 text-[12px]"
           >
-            Purchase date
+            {dict.products.purchaseDateAxis}
           </text>
           <text
             x={16}
@@ -158,7 +160,7 @@ export function PriceHistoryChart({ rows, unit }: PriceHistoryChartProps) {
             transform={`rotate(-90 16 ${HEIGHT / 2})`}
             className="fill-slate-600 text-[12px]"
           >
-            {`Price / ${unit}`}
+            {`${dict.products.priceAxisLabel.replace("{unit}", unit)}`}
           </text>
 
           {rows.length > 1 ? (
@@ -208,12 +210,12 @@ export function PriceHistoryChart({ rows, unit }: PriceHistoryChartProps) {
             href={`/receipts/${activePoint.row.receipt_id}`}
             className="mt-2 inline-flex font-medium text-emerald-700"
           >
-            View source receipt
+            {dict.products.viewSourceReceipt}
           </Link>
         </div>
       ) : (
         <p className="mt-4 text-sm text-slate-500">
-          Hover or focus a point to see store, date, and source receipt.
+          {dict.products.hoverHint}
         </p>
       )}
     </section>

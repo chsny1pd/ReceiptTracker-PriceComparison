@@ -6,6 +6,7 @@ import { PriceHistoryChart } from "@/components/products/price-history-chart";
 import { PriceHistoryTable } from "@/components/products/price-history-table";
 import { PageHeader } from "@/components/page-header";
 import { getRequiredUser } from "@/lib/auth";
+import { getServerI18n } from "@/lib/server-preferences";
 import type { ProductHistoryRow, SpendlyUnit } from "@/lib/types";
 
 type ProductHistoryPageProps = {
@@ -20,6 +21,7 @@ export default async function ProductHistoryPage({
   const { id } = await params;
   const query = await searchParams;
   const { supabase, user } = await getRequiredUser();
+  const { dict } = await getServerI18n();
 
   const { data: product, error: productError } = await supabase
     .from("products")
@@ -54,16 +56,16 @@ export default async function ProductHistoryPage({
   return (
     <>
       <PageHeader
-        title={`${product.name} price history`}
-        description="Trends come only from receipts you logged. Prices use normalized unit values for fair comparison."
+        title={`${product.name} ${dict.products.priceHistoryTitleSuffix}`}
+        description={dict.products.priceHistoryDescription}
         backHref="/receipts"
-        backLabel="Back to receipts"
+        backLabel={dict.receipts.backToReceipts}
         action={
           <Link
             href={`/compare?productId=${product.id}`}
             className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-300 px-5 text-sm font-semibold"
           >
-            Compare stores
+            {dict.products.compareStores}
           </Link>
         }
       />
@@ -78,19 +80,20 @@ export default async function ProductHistoryPage({
         <HistoryUnitFilter
           units={availableUnits}
           currentUnit={unitFilter}
+          dict={dict}
         />
       </div>
 
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
           <p className="text-sm text-slate-600">
-            No receipt history for this product yet.
+            {dict.products.noHistoryYet}
           </p>
           <Link
             href="/receipts/new"
             className="mt-4 inline-flex h-11 items-center justify-center rounded-lg bg-emerald-700 px-5 text-sm font-semibold text-white"
           >
-            Log a receipt
+            {dict.receipts.logReceipt}
           </Link>
         </div>
       ) : (
@@ -100,6 +103,7 @@ export default async function ProductHistoryPage({
             rows={rows}
             productName={product.name}
             unit={chartUnit}
+            dict={dict}
           />
         </div>
       )}

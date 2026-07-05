@@ -78,9 +78,11 @@ html[data-theme="dark"] .text-slate-900 {
 html.dark .text-slate-700,
 html.dark .text-slate-600,
 html.dark .text-slate-500,
+html.dark .text-slate-400,
 html[data-theme="dark"] .text-slate-700,
 html[data-theme="dark"] .text-slate-600,
-html[data-theme="dark"] .text-slate-500 {
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-slate-400 {
   color: var(--muted);
 }
 
@@ -165,6 +167,21 @@ html[data-theme="dark"] .text-emerald-800,
 html[data-theme="dark"] .text-emerald-700,
 html[data-theme="dark"] .text-emerald-600 {
   color: #6ee7b7;
+}
+
+html.dark .bg-slate-200,
+html[data-theme="dark"] .bg-slate-200 {
+  background-color: var(--muted-surface);
+}
+
+html.dark .bg-emerald-100,
+html[data-theme="dark"] .bg-emerald-100 {
+  background-color: rgba(6, 78, 59, 0.55);
+}
+
+html.dark .text-sky-700,
+html[data-theme="dark"] .text-sky-700 {
+  color: #7dd3fc;
 }
 
 html.dark input,

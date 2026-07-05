@@ -8,6 +8,8 @@ import { ReceiptImage } from "@/components/receipt-image";
 import { SplitForm } from "@/components/splits/split-form";
 import { getRequiredUser } from "@/lib/auth";
 import { formatDate, formatMoney, formatUnitPrice } from "@/lib/format";
+import { receiptLabel } from "@/lib/receipt-label";
+import { getServerI18n } from "@/lib/server-preferences";
 import { relationId, relationName } from "@/lib/supabase-helpers";
 import type {
   ReceiptItemRow,
@@ -24,11 +26,12 @@ export default async function ReceiptDetailPage({
 }: ReceiptDetailPageProps) {
   const { id } = await params;
   const { supabase, user } = await getRequiredUser();
+  const { dict } = await getServerI18n();
 
   const { data: receipt, error } = await supabase
     .from("receipts")
     .select(
-      "id, owner_user_id, purchased_at, subtotal, tax, total, notes, image_object_key, stores(name, location), receipt_items(id, line_number, raw_name, quantity, unit, line_total, normalized_quantity, normalized_unit, normalized_unit_price, image_object_key, product:products(id, name))",
+      "id, title, owner_user_id, purchased_at, subtotal, tax, total, notes, image_object_key, stores(name, location), receipt_items(id, line_number, raw_name, quantity, unit, line_total, normalized_quantity, normalized_unit, normalized_unit_price, image_object_key, product:products(id, name))",
     )
     .eq("id", id)
     .single();
@@ -42,9 +45,9 @@ export default async function ReceiptDetailPage({
   const items = (
     (receipt.receipt_items ?? []) as unknown as ReceiptItemRow[]
   ).sort((left, right) => left.line_number - right.line_number);
-  const receiptTitle = relationName(
-    receipt.stores,
-    items[0]?.raw_name ? `${items[0].raw_name} receipt` : "Receipt",
+  const receiptTitle = receiptLabel(
+    receipt,
+    items[0]?.raw_name ? `${items[0].raw_name} ${dict.receipts.receiptTitleSuffix}` : dict.receipts.receiptTitleFallback,
   );
 
   const [{ data: profiles }, { data: splits }, { data: paymentMethods }] = await Promise.all([
@@ -82,26 +85,26 @@ export default async function ReceiptDetailPage({
     <>
         <PageHeader
         title={receiptTitle}
-        description={`Purchased on ${formatDate(receipt.purchased_at)}`}
+        description={`${dict.receipts.purchasedOn} ${formatDate(receipt.purchased_at)}`}
         backHref="/receipts"
-        backLabel="Back to receipts"
+        backLabel={dict.receipts.backToReceipts}
         action={canManageReceipt ? <DeleteReceiptButton receiptId={receipt.id} /> : undefined}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="rounded-lg border border-slate-300 bg-white p-5">
-          <h2 className="text-lg font-semibold">Totals</h2>
+          <h2 className="text-lg font-semibold">{dict.receipts.totals}</h2>
           <dl className="mt-4 grid gap-3 text-sm">
             <div className="flex justify-between">
-              <dt className="text-slate-600">Subtotal</dt>
+              <dt className="text-slate-600">{dict.common.subtotal}</dt>
               <dd className="tabular-nums">{formatMoney(Number(receipt.subtotal))}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-slate-600">Tax</dt>
+              <dt className="text-slate-600">{dict.common.tax}</dt>
               <dd className="tabular-nums">{formatMoney(Number(receipt.tax))}</dd>
             </div>
             <div className="flex justify-between font-semibold">
-              <dt>Total</dt>
+              <dt>{dict.common.total}</dt>
               <dd className="tabular-nums">{formatMoney(Number(receipt.total))}</dd>
             </div>
           </dl>
@@ -112,7 +115,7 @@ export default async function ReceiptDetailPage({
 
         {receipt.image_object_key ? (
           <section className="rounded-lg border border-slate-300 bg-white p-5">
-            <h2 className="mb-4 text-lg font-semibold">Receipt image</h2>
+            <h2 className="mb-4 text-lg font-semibold">{dict.receipts.receiptImageTitle}</h2>
             <ReceiptImage receiptId={receipt.id} />
           </section>
         ) : null}
@@ -120,15 +123,15 @@ export default async function ReceiptDetailPage({
 
       <section className="mt-6 overflow-hidden rounded-lg border border-slate-300 bg-white">
         <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-semibold">Line items</h2>
+          <h2 className="text-lg font-semibold">{dict.receipts.lineItems}</h2>
         </div>
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
-              <th className="px-4 py-3 font-medium">Item</th>
-              <th className="px-4 py-3 font-medium">Quantity</th>
-              <th className="px-4 py-3 font-medium">Line total</th>
-              <th className="px-4 py-3 font-medium">Normalized price</th>
+              <th className="px-4 py-3 font-medium">{dict.receipts.item}</th>
+              <th className="px-4 py-3 font-medium">{dict.common.quantity}</th>
+              <th className="px-4 py-3 font-medium">{dict.receipts.lineTotal}</th>
+              <th className="px-4 py-3 font-medium">{dict.receipts.normalizedPrice}</th>
             </tr>
           </thead>
           <tbody>
@@ -148,7 +151,7 @@ export default async function ReceiptDetailPage({
                       href={`/products/${productId}/history`}
                       className="mt-1 inline-flex text-sm font-medium text-emerald-700"
                     >
-                      View price history
+                      {dict.receipts.viewPriceHistory}
                     </Link>
                   ) : null}
                   {item.image_object_key ? (
@@ -191,14 +194,13 @@ export default async function ReceiptDetailPage({
           />
         ) : (
           <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
-            This receipt was shared with you through a split. You can review it here,
-            but only the owner can edit or create new splits from it.
+            {dict.receipts.sharedReadOnly}
           </div>
         )}
 
         {splitSummaries.length > 0 ? (
           <div className="rounded-lg border border-slate-300 bg-white p-5">
-            <h2 className="text-lg font-semibold">Existing splits</h2>
+            <h2 className="text-lg font-semibold">{dict.receipts.existingSplits}</h2>
             <ul className="mt-4 divide-y divide-slate-200">
               {splitSummaries.map((split) => (
                 <li
@@ -207,11 +209,11 @@ export default async function ReceiptDetailPage({
                 >
                   <div>
                     <p className="font-medium capitalize">
-                      {split.split_method} split ·{" "}
+                      {split.split_method} {dict.receipts.splitRecordLabel} ·{" "}
                       {formatMoney(Number(split.total_amount))}
                     </p>
                     <p className="text-sm text-slate-600">
-                      {split.receipt_item_id ? "Line item split" : "Whole receipt"}{" "}
+                      {split.receipt_item_id ? dict.receipts.lineItemSplit : dict.receipts.wholeReceipt}{" "}
                       · {formatDate(split.created_at.slice(0, 10))}
                     </p>
                   </div>
@@ -219,7 +221,7 @@ export default async function ReceiptDetailPage({
                     href={`/splits/${split.id}`}
                     className="text-sm font-medium text-emerald-700"
                   >
-                    Open split
+                    {dict.splits.openSplit}
                   </Link>
                 </li>
               ))}
@@ -229,9 +231,9 @@ export default async function ReceiptDetailPage({
       </section>
 
       <p className="mt-6 text-sm text-slate-600">
-        Use product history links above to review trends, or{" "}
+        {dict.receipts.useHistoryLinks}{" "}
         <Link href="/compare" className="font-medium text-emerald-700">
-          compare latest store prices
+          {dict.receipts.compareLatest}
         </Link>
         .
       </p>

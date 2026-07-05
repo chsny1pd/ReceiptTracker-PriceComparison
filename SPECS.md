@@ -203,6 +203,12 @@ Current invariant remains:
 - payer never gets an `expense_split_shares` row
 - split share rows represent only people who owe the payer
 
+Detailed allocation behavior:
+- the UI may collect one detailed split plan across many receipt items
+- the first implementation may persist that plan as multiple item-level custom splits behind the scenes
+- each generated split still follows the current invariant that only non-payer debtors receive `expense_split_shares` rows
+- payer remainder is computed per item as `item total - participant allocations`
+
 ### 9.2 Payment Flow
 
 Expected lifecycle:
@@ -332,6 +338,7 @@ New server-side behavior must cover:
 - receipt draft save/load/delete/finalize
 - payment method CRUD
 - QR upload metadata flow
+- detailed item-allocation split creation
 - payment proof submission
 - payment proof confirmation/rejection
 - theme/language preference persistence if implemented server-side
@@ -377,6 +384,9 @@ Splits must clearly show:
 - payment method to use
 - proof submission state
 - proof review actions
+- item-level allocation when a receipt is shared in detail
+- per-person totals and payer remainder before split creation
+- a visually obvious payment-slip upload action, not only a plain file input
 
 ### Settings
 
@@ -429,3 +439,411 @@ When another AI continues this project:
 - keep image binaries out of Postgres
 - keep route handlers and server actions thin
 - update `SPECS.md` whenever behavior, data shape, access rules, or non-goals change
+
+## 18. Diagrams
+
+This section is the visual reference for the product. Keep every diagram in sync with `supabase/schema.sql` and the route list in Section 13 whenever either changes.
+
+### 18.1 System Architecture
+
+```mermaid
+flowchart TB
+    User((User / Browser))
+
+    subgraph Next["Next.js App Router (Vercel)"]
+        MW["middleware.ts\n(session refresh)"]
+        RSC["Server Components\n(pages, layouts)"]
+        RA["Server Actions\n(src/app/actions/*)"]
+        API["Route Handlers\n(/api/*, /auth/*)"]
+    end
+
+    subgraph SB["Supabase"]
+        Auth["Supabase Auth\n(GitHub OAuth)"]
+        PG[("Postgres\nRLS-protected tables + RPCs")]
+    end
+
+    R2[("Cloudflare R2\nreceipt / item / QR / proof images")]
+    GH[["GitHub OAuth"]]
+
+    User -->|HTTPS| RSC
+    User -->|form submit| RA
+    User -->|fetch / upload| API
+    RSC --> MW
+    RA --> MW
+    API --> MW
+    MW -->|"auth.getUser()"| Auth
+    Auth <-->|OAuth code exchange| GH
+    RSC -->|"select (RLS)"| PG
+    RA -->|"insert/update/RPC (RLS)"| PG
+    API -->|"presigned PUT/GET"| R2
+    PG -.->|"object_key metadata only"| API
+```
+
+### 18.2 Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    PROFILES ||--o{ STORES : owns
+    PROFILES ||--o{ PRODUCTS : owns
+    PROFILES ||--o{ RECEIPTS : owns
+    PROFILES ||--o{ RECEIPT_DRAFTS : owns
+    PROFILES ||--o{ USER_PAYMENT_METHODS : configures
+    PROFILES ||--o{ EXPENSE_SPLITS : "creates / pays"
+    PROFILES ||--o{ EXPENSE_SPLIT_SHARES : "owes as participant"
+    PROFILES ||--o{ SHARE_PAYMENT_PROOFS : "uploads / reviews"
+
+    STORES ||--o{ RECEIPTS : "sold at"
+    RECEIPTS ||--o{ RECEIPT_ITEMS : contains
+    PRODUCTS ||--o{ RECEIPT_ITEMS : "normalized as"
+
+    RECEIPTS ||--o{ EXPENSE_SPLITS : "split from"
+    RECEIPT_ITEMS |o--o{ EXPENSE_SPLITS : "optional line-item split"
+    USER_PAYMENT_METHODS |o--o{ EXPENSE_SPLITS : "receiver method"
+
+    EXPENSE_SPLITS ||--o{ EXPENSE_SPLIT_SHARES : has
+    EXPENSE_SPLIT_SHARES ||--o{ SHARE_PAYMENT_PROOFS : "proof submissions"
+
+    PROFILES {
+        uuid id PK
+        text github_username
+        text display_name
+        text avatar_url
+    }
+    STORES {
+        uuid id PK
+        uuid owner_user_id FK
+        citext name
+        text location
+    }
+    PRODUCTS {
+        uuid id PK
+        uuid owner_user_id FK
+        citext name
+        enum unit_category
+        enum default_unit
+    }
+    RECEIPTS {
+        uuid id PK
+        uuid owner_user_id FK
+        uuid store_id FK
+        text title
+        date purchased_at
+        numeric subtotal
+        numeric tax
+        numeric total
+        text image_object_key
+    }
+    RECEIPT_ITEMS {
+        uuid id PK
+        uuid receipt_id FK
+        uuid product_id FK
+        int line_number
+        text raw_name
+        numeric quantity
+        enum unit
+        numeric normalized_quantity
+        enum normalized_unit
+        numeric line_total
+        numeric normalized_unit_price
+        text image_object_key
+    }
+    RECEIPT_DRAFTS {
+        uuid id PK
+        uuid owner_user_id FK
+        text title
+        text source
+        jsonb payload
+    }
+    USER_PAYMENT_METHODS {
+        uuid id PK
+        uuid owner_user_id FK
+        text label
+        text provider_name
+        text promptpay_id
+        text qr_image_object_key
+        bool is_default
+    }
+    EXPENSE_SPLITS {
+        uuid id PK
+        uuid receipt_id FK
+        uuid receipt_item_id FK
+        uuid created_by_user_id FK
+        uuid payer_user_id FK
+        uuid receiver_payment_method_id FK
+        enum split_method
+        numeric total_amount
+    }
+    EXPENSE_SPLIT_SHARES {
+        uuid id PK
+        uuid split_id FK
+        uuid participant_user_id FK
+        numeric owed_amount
+        enum share_status
+        uuid latest_payment_proof_id FK
+        timestamptz settled_at
+    }
+    SHARE_PAYMENT_PROOFS {
+        uuid id PK
+        uuid share_id FK
+        uuid uploader_user_id FK
+        uuid receiver_user_id FK
+        text image_object_key
+        enum review_status
+        timestamptz reviewed_at
+    }
+```
+
+### 18.3 Site Map
+
+```mermaid
+flowchart LR
+    Root["/"] --> Login["/login"]
+    Login -->|GitHub OAuth| Dashboard["/dashboard"]
+
+    Dashboard --> Compare["/compare"]
+    Dashboard --> Receipts["/receipts"]
+    Dashboard --> Splits["/splits"]
+    Dashboard --> Settings["/settings"]
+
+    Compare -->|"add to cart -> draft"| ReceiptNew["/receipts/new"]
+    Receipts --> ReceiptNew
+    Receipts --> ReceiptDetail["/receipts/[id]"]
+    ReceiptDetail --> ProductHistory["/products/[id]/history"]
+    ReceiptDetail -->|create split| Splits
+
+    Splits --> SplitDetail["/splits/[id]"]
+    SplitDetail -->|"source receipt (read-only)"| ReceiptDetail
+
+    Settings -->|payment methods + QR| Settings
+
+    Balances["/balances (compat redirect)"] -.-> Splits
+```
+
+### 18.4 Authentication Sequence
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant B as Browser
+    participant MW as middleware.ts
+    participant SA as Supabase Auth
+    participant GH as GitHub OAuth
+    participant DB as Postgres
+
+    U->>B: Click "Continue with GitHub"
+    B->>SA: signInWithOAuth(github)
+    SA->>GH: Redirect to authorize
+    GH-->>U: Consent screen
+    U->>GH: Approve
+    GH-->>B: Redirect to /auth/callback?code=...
+    B->>SA: exchangeCodeForSession(code)
+    SA-->>B: Set session cookies
+    SA->>DB: trigger handle_new_user() upserts profiles
+    B->>MW: Next request with session cookie
+    MW->>SA: auth.getUser()
+    SA-->>MW: user
+    MW-->>B: allow, continue to /dashboard
+```
+
+### 18.5 Receipt Draft Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> LocalDraft: user starts typing
+    LocalDraft --> LocalDraft: local autosave (debounced)
+    LocalDraft --> ServerDraft: server-backed autosave succeeds
+    ServerDraft --> ServerDraft: edit / resume across devices
+    ServerDraft --> Finalized: finalize into receipt + receipt_items
+    ServerDraft --> Discarded: user discards draft
+    LocalDraft --> Discarded: user discards before sync
+    Finalized --> [*]
+    Discarded --> [*]
+
+    note right of Finalized
+        Only finalized receipts count
+        toward price history, saved
+        insights, and splits.
+    end note
+```
+
+### 18.6 Compare → Cart → Receipt Draft Flow
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant C as /compare
+    participant Cart as Compare Cart (client state)
+    participant RA as Server Action (drafts.ts)
+    participant DB as Postgres
+
+    U->>C: Select product + Store A + Store B
+    C->>DB: compare_product_between_stores() RPC
+    DB-->>C: normalized unit prices per store
+    C-->>U: Show cheaper option
+    U->>Cart: Add cheapest item to cart
+    U->>Cart: Repeat for more products
+    U->>C: "Turn cart into receipt draft"
+    C->>RA: createDraftFromCompareCart(cartItems)
+    RA->>DB: insert into receipt_drafts (payload = cart)
+    DB-->>RA: draft id
+    RA-->>U: redirect to /receipts/new?draft=<id>
+```
+
+### 18.7 Split Creation Flow
+
+```mermaid
+sequenceDiagram
+    actor U as Payer
+    participant R as /receipts/[id]
+    participant RA as Server Action (splits.ts)
+    participant DB as Postgres
+
+    U->>R: Choose "Split this receipt / item"
+    U->>R: Pick split type (even / custom / detailed items)
+    R->>RA: createSplit(receiptId, participants, allocations)
+    alt even split
+        RA->>DB: create_even_expense_split() RPC
+    else custom split
+        RA->>DB: create_custom_expense_split() RPC
+    else detailed item allocation
+        RA->>DB: create_detailed_expense_splits() RPC
+    end
+    DB->>DB: validate_expense_split() / validate_expense_split_share()
+    DB-->>RA: expense_splits + expense_split_shares rows
+    RA-->>U: redirect to /splits/[id]
+
+    Note over DB: Payer never receives an\nexpense_split_shares row.
+```
+
+### 18.8 Payment Proof Submission & Review
+
+```mermaid
+sequenceDiagram
+    actor D as Debtor
+    actor Rcv as Receiver
+    participant S as /splits/[id]
+    participant API as /api/payment-proofs/presign
+    participant R2 as Cloudflare R2
+    participant RA as Server Action (payment-proofs.ts)
+    participant DB as Postgres
+
+    D->>S: View receiver's selected payment method
+    D->>API: Request presigned upload URL
+    API-->>D: Presigned PUT URL
+    D->>R2: PUT payment slip image
+    D->>RA: submitPaymentProof(shareId, imageObjectKey)
+    RA->>DB: submit_share_payment_proof() RPC
+    DB->>DB: share_status -> submitted,\npayment_submitted_at = now()
+    DB-->>RA: proof row
+    RA-->>D: confirmation
+
+    Rcv->>S: Open pending proof review
+    S->>API: Request presigned view URL for proof image
+    API->>R2: GET (presigned)
+    R2-->>Rcv: Image preview
+    Rcv->>RA: reviewProof(proofId, decision)
+    RA->>DB: review_share_payment_proof() RPC
+    alt confirmed
+        DB->>DB: share_status -> confirmed,\nsettled_at = now()
+    else rejected
+        DB->>DB: share_status -> rejected
+    end
+    DB-->>Rcv: updated share status
+```
+
+### 18.9 Split Share Status State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> unpaid
+    unpaid --> submitted: debtor uploads payment proof
+    submitted --> confirmed: receiver confirms proof
+    submitted --> rejected: receiver rejects proof
+    rejected --> submitted: debtor submits new proof
+    confirmed --> [*]: excluded from balances
+
+    note right of confirmed
+        get_current_balances() only
+        nets shares that are not
+        yet confirmed.
+    end note
+```
+
+### 18.10 Image Upload Pattern (generic)
+
+Receipt, item, QR, and payment-proof images all follow the same presign pattern; only the route and ownership check differ.
+
+```mermaid
+sequenceDiagram
+    actor U as User (owner or authorized viewer)
+    participant Page as App Page
+    participant API as /api/*/presign route
+    participant DB as Postgres (RLS check)
+    participant R2 as Cloudflare R2
+
+    Note over Page: Upload path
+    U->>Page: Select image file
+    Page->>Page: Compress/resize if needed (client-image.ts)
+    Page->>API: Request presigned PUT (object key)
+    API->>DB: auth.getUser() + ownership/visibility check
+    DB-->>API: authorized
+    API-->>Page: Presigned PUT URL
+    Page->>R2: PUT compressed image
+    Page->>DB: Save object_key metadata (server action)
+
+    Note over Page: View path
+    U->>API: Request presigned GET for object_key
+    API->>DB: auth.getUser() + can_view_* check
+    DB-->>API: authorized / denied
+    API-->>Page: Presigned GET URL or 403
+    Page->>R2: GET image via presigned URL
+```
+
+### 18.11 Balance Derivation
+
+```mermaid
+flowchart LR
+    ES[(expense_splits)] --> ESS[(expense_split_shares)]
+    ESS -->|"filter: share_status != confirmed"| Unsettled["Unsettled shares"]
+    Unsettled -->|"group by participant_user_id, payer_user_id"| Netting["Net per user pair"]
+    Netting --> GCB["get_current_balances() RPC"]
+    GCB --> Splits["/splits balances panel"]
+    GCB --> Dashboard["/dashboard debts widget"]
+
+    style ES fill:#f1f5f9,stroke:#475569
+    style ESS fill:#f1f5f9,stroke:#475569
+```
+
+### 18.12 Data Ownership & Access Boundaries
+
+```mermaid
+flowchart TB
+    subgraph Owner["Receipt Owner"]
+        O1["Full CRUD on own\nreceipts/items/drafts"]
+        O2["Create/manage splits\nfrom own receipts"]
+    end
+
+    subgraph Participant["Split Participant (non-owner)"]
+        P1["Read-only source receipt\n+ receipt/item images"]
+        P2["Submit payment proof"]
+        P3["View receiver payment method\n(only while owing)"]
+    end
+
+    subgraph Receiver["Split Receiver / Payer"]
+        RC1["Confirm/reject payment proof"]
+        RC2["View own payment methods\nand QR always"]
+    end
+
+    Receipt[("receipts / receipt_items")]
+    Split[("expense_splits / expense_split_shares")]
+    Proof[("share_payment_proofs")]
+    PM[("user_payment_methods")]
+
+    O1 --> Receipt
+    O2 --> Split
+    P1 -.->|RLS: can_access_receipt| Receipt
+    P2 --> Proof
+    P3 -.->|RLS: can_view_payment_method| PM
+    RC1 --> Proof
+    RC2 --> PM
+```

@@ -120,6 +120,18 @@ export default async function SplitsPage() {
     })
     .filter((share): share is UnsettledShareRow => share !== null);
 
+  const actionQueueShares = unsettledShares.filter((share) => {
+    if (share.participant_user_id === user.id) {
+      return share.share_status === "unpaid" || share.share_status === "rejected";
+    }
+
+    if (share.payer_user_id === user.id) {
+      return share.share_status === "submitted";
+    }
+
+    return false;
+  });
+
   const openSplits = (rawSplits ?? []) as RawSplitSummary[];
 
   return (
@@ -137,15 +149,22 @@ export default async function SplitsPage() {
           </p>
         </article>
         <article className="rounded-lg border border-slate-300 bg-white p-5">
-          <p className="text-sm text-slate-500">{dict.splits.sharesAwaitingPayment}</p>
+          <p className="text-sm text-slate-500">{dict.splits.yourPaymentsToSend}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">
-            {unsettledShares.filter((share) => share.share_status === "unpaid").length}
+            {
+              actionQueueShares.filter(
+                (share) => share.participant_user_id === user.id,
+              ).length
+            }
           </p>
         </article>
         <article className="rounded-lg border border-slate-300 bg-white p-5">
-          <p className="text-sm text-slate-500">{dict.splits.proofsAwaitingReview}</p>
+          <p className="text-sm text-slate-500">{dict.splits.yourProofReviews}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">
-            {unsettledShares.filter((share) => share.share_status === "submitted").length}
+            {
+              actionQueueShares.filter((share) => share.payer_user_id === user.id)
+                .length
+            }
           </p>
         </article>
         <article className="rounded-lg border border-slate-300 bg-white p-5">
@@ -160,12 +179,17 @@ export default async function SplitsPage() {
           balances={(balances ?? []) as BalanceRow[]}
           currentUserId={user.id}
           profileMap={profileMap}
+          dict={dict}
         />
       </section>
 
       <section className="mt-8">
         <h2 className="mb-4 text-lg font-semibold">{dict.splits.actionQueue}</h2>
-        <UnsettledSharesPanel shares={unsettledShares} currentUserId={user.id} />
+        <UnsettledSharesPanel
+          shares={actionQueueShares}
+          currentUserId={user.id}
+          dict={dict}
+        />
       </section>
 
       <section className="mt-8 rounded-lg border border-slate-300 bg-white p-5">
@@ -185,7 +209,7 @@ export default async function SplitsPage() {
                 >
                   <div>
                     <p className="font-medium capitalize">
-                      {split.split_method} split
+                      {split.split_method} {dict.receipts.splitRecordLabel}
                     </p>
                     <p className="text-sm text-slate-600">
                       {profileLabel(

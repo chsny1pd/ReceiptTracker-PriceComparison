@@ -37,7 +37,7 @@ export function AppShell({ children, avatarUrl, displayName }: AppShellProps) {
             >
               Spendly
             </Link>
-            <nav className="flex flex-wrap gap-1 sm:gap-2" aria-label="Main">
+            <nav className="flex flex-wrap gap-1 sm:gap-2" aria-label={dict.nav.mainNavLabel}>
               {navItems.map((item) => (
                 <Link
                   key={item.href}

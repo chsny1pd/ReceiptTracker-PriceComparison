@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 
 import { deleteReceipt } from "@/app/actions/receipts";
+import { useAppPreferences } from "@/components/app-preferences-provider";
 import { PendingNotice } from "@/components/ui/pending-notice";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -11,11 +12,12 @@ type DeleteReceiptButtonProps = {
 };
 
 export function DeleteReceiptButton({ receiptId }: DeleteReceiptButtonProps) {
+  const { dict } = useAppPreferences();
   const [isPending, startTransition] = useTransition();
 
   return (
     <>
-      <PendingNotice show={isPending} message="Deleting receipt..." />
+      <PendingNotice show={isPending} message={dict.receipts.deletingReceipt} />
       <form
         action={(formData) => {
           startTransition(() => deleteReceipt(formData));
@@ -30,10 +32,10 @@ export function DeleteReceiptButton({ receiptId }: DeleteReceiptButtonProps) {
           {isPending ? (
             <>
               <Spinner size="sm" />
-              Deleting...
+              {dict.receipts.deleting}
             </>
           ) : (
-            "Delete receipt"
+            dict.common.deleteReceipt
           )}
         </button>
       </form>

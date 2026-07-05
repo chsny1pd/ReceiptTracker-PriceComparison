@@ -52,6 +52,7 @@ create table public.receipts (
   id uuid primary key default gen_random_uuid(),
   owner_user_id uuid not null references public.profiles(id) on delete cascade,
   store_id uuid not null references public.stores(id) on delete restrict,
+  title text,
   purchased_at date not null,
   subtotal numeric(12, 2) not null,
   tax numeric(12, 2) not null default 0,
@@ -63,6 +64,9 @@ create table public.receipts (
   updated_at timestamptz not null default now(),
   constraint receipts_amounts_non_negative check (
     subtotal >= 0 and tax >= 0 and total >= 0
+  ),
+  constraint receipts_title_not_blank check (
+    title is null or length(btrim(title)) > 0
   ),
   constraint receipts_image_key_not_blank check (
     image_object_key is null or length(btrim(image_object_key)) > 0
@@ -803,6 +807,70 @@ begin
 end;
 $$;
 
+create or replace function public.create_detailed_expense_splits(
+  p_receipt_id uuid,
+  p_allocations jsonb,
+  p_receiver_payment_method_id uuid default null
+)
+returns uuid[]
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid = auth.uid();
+  v_allocation jsonb;
+  v_split_ids uuid[] = '{}'::uuid[];
+begin
+  if v_user_id is null then
+    raise exception 'authentication required' using errcode = '28000';
+  end if;
+
+  if p_allocations is null or jsonb_typeof(p_allocations) <> 'array' or
+     jsonb_array_length(p_allocations) = 0 then
+    raise exception 'detailed split requires at least one allocated item'
+      using errcode = '23514';
+  end if;
+
+  if not exists (
+    select 1
+    from public.receipts r
+    where r.id = p_receipt_id
+      and r.owner_user_id = v_user_id
+  ) then
+    raise exception 'receipt must belong to current user'
+      using errcode = '42501';
+  end if;
+
+  if p_receiver_payment_method_id is not null and not exists (
+    select 1
+    from public.user_payment_methods pm
+    where pm.id = p_receiver_payment_method_id
+      and pm.owner_user_id = v_user_id
+  ) then
+    raise exception 'receiver payment method must belong to current user'
+      using errcode = '42501';
+  end if;
+
+  for v_allocation in
+    select value from jsonb_array_elements(p_allocations) as e(value)
+  loop
+    v_split_ids = array_append(
+      v_split_ids,
+      public.create_custom_expense_split(
+        p_receipt_id,
+        (v_allocation ->> 'receipt_item_id')::uuid,
+        round((v_allocation ->> 'payer_share_amount')::numeric, 2),
+        v_allocation -> 'shares',
+        p_receiver_payment_method_id
+      )
+    );
+  end loop;
+
+  return v_split_ids;
+end;
+$$;
+
 create or replace function public.mark_split_share_settled(p_share_id uuid)
 returns public.expense_split_shares
 language plpgsql
@@ -1227,6 +1295,11 @@ revoke execute on function public.create_custom_expense_split(
   jsonb,
   uuid
 ) from public;
+revoke execute on function public.create_detailed_expense_splits(
+  uuid,
+  jsonb,
+  uuid
+) from public;
 revoke execute on function public.mark_split_share_settled(uuid) from public;
 
 grant execute on function public.create_even_expense_split(
@@ -1239,6 +1312,11 @@ grant execute on function public.create_custom_expense_split(
   uuid,
   uuid,
   numeric,
+  jsonb,
+  uuid
+) to authenticated;
+grant execute on function public.create_detailed_expense_splits(
+  uuid,
   jsonb,
   uuid
 ) to authenticated;

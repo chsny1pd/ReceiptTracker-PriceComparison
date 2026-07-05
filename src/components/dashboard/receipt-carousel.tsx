@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 
+import { useAppPreferences } from "@/components/app-preferences-provider";
 import { ReceiptCard, type ReceiptCardData } from "@/components/dashboard/receipt-card";
 
 type ReceiptCarouselProps = {
@@ -9,6 +10,7 @@ type ReceiptCarouselProps = {
 };
 
 export function ReceiptCarousel({ receipts }: ReceiptCarouselProps) {
+  const { dict } = useAppPreferences();
   const trackRef = useRef<HTMLDivElement>(null);
 
   function scrollBy(direction: "left" | "right") {
@@ -24,7 +26,7 @@ export function ReceiptCarousel({ receipts }: ReceiptCarouselProps) {
   if (receipts.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600">
-        No receipts yet. Log your first receipt to see it here.
+        {dict.dashboard.noReceiptsInCarousel}
       </p>
     );
   }
@@ -33,14 +35,17 @@ export function ReceiptCarousel({ receipts }: ReceiptCarouselProps) {
     <div className="relative">
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
-          {receipts.length} most recent receipt{receipts.length === 1 ? "" : "s"}
+          {receipts.length}{" "}
+          {receipts.length === 1
+            ? dict.dashboard.recentReceiptCountSingular
+            : dict.dashboard.recentReceiptCountPlural}
         </p>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => scrollBy("left")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-sm transition hover:border-slate-500"
-            aria-label="Scroll to older receipts"
+            aria-label={dict.dashboard.scrollToOlder}
           >
             ←
           </button>
@@ -48,7 +53,7 @@ export function ReceiptCarousel({ receipts }: ReceiptCarouselProps) {
             type="button"
             onClick={() => scrollBy("right")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-sm transition hover:border-slate-500"
-            aria-label="Scroll to newer receipts"
+            aria-label={dict.dashboard.scrollToNewer}
           >
             →
           </button>

@@ -22,11 +22,11 @@ export default async function ComparePage() {
       />
 
       <section className="space-y-5">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4">
-          <h2 className="text-lg font-semibold text-emerald-950">
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4">
+          <h2 className="text-lg font-semibold text-emerald-900">
             {dict.compare.quickTab}
           </h2>
-          <p className="mt-1 text-sm text-emerald-900/80">
+          <p className="mt-1 text-sm text-emerald-900">
             {dict.compare.intro}
           </p>
         </div>

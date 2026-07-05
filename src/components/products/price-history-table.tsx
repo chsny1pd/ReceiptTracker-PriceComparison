@@ -1,18 +1,21 @@
 import Link from "next/link";
 
 import { formatDate, formatMoney, formatUnitPrice } from "@/lib/format";
+import type { Dictionary } from "@/lib/i18n";
 import type { ProductHistoryRow, SpendlyUnit } from "@/lib/types";
 
 type PriceHistoryTableProps = {
   rows: ProductHistoryRow[];
   productName: string;
   unit: SpendlyUnit;
+  dict: Dictionary;
 };
 
 export function PriceHistoryTable({
   rows,
   productName,
   unit,
+  dict,
 }: PriceHistoryTableProps) {
   return (
     <section
@@ -21,11 +24,10 @@ export function PriceHistoryTable({
     >
       <div className="border-b border-slate-200 px-5 py-4">
         <h2 id="history-table-heading" className="text-lg font-semibold">
-          History table
+          {dict.products.historyTableTitle}
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Same receipt-derived data as the chart above, in tabular form for
-          screen readers and keyboard users.
+          {dict.products.historyTableDescription}
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -34,25 +36,26 @@ export function PriceHistoryTable({
           aria-describedby="history-table-summary"
         >
           <caption id="history-table-summary" className="px-5 py-3 text-left text-sm text-slate-600">
-            Price history for {productName} shown as {unit} normalized unit
-            prices from logged receipts.
+            {dict.products.historyTableSummary
+              .replace("{product}", productName)
+              .replace("{unit}", unit)}
           </caption>
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
               <th scope="col" className="px-4 py-3 font-medium">
-                Date
+                {dict.products.date}
               </th>
               <th scope="col" className="px-4 py-3 font-medium">
-                Store
+                {dict.products.store}
               </th>
               <th scope="col" className="px-4 py-3 font-medium">
-                Normalized price
+                {dict.products.normalizedPrice}
               </th>
               <th scope="col" className="px-4 py-3 font-medium">
-                Line total
+                {dict.products.lineTotal}
               </th>
               <th scope="col" className="px-4 py-3 font-medium">
-                Receipt
+                {dict.products.receipt}
               </th>
             </tr>
           </thead>
@@ -77,7 +80,7 @@ export function PriceHistoryTable({
                     href={`/receipts/${row.receipt_id}`}
                     className="font-medium text-emerald-700"
                   >
-                    Open receipt
+                    {dict.products.openReceipt}
                   </Link>
                 </td>
               </tr>

@@ -10,6 +10,12 @@ export type CustomSplitShareInput = {
   owedAmount: number;
 };
 
+export type DetailedSplitItemInput = {
+  receiptItemId: string;
+  payerShareAmount: number;
+  shares: CustomSplitShareInput[];
+};
+
 export async function createEvenSplit(input: {
   receiptId: string;
   receiptItemId?: string | null;
@@ -69,6 +75,40 @@ export async function createCustomSplit(input: {
   revalidatePath(`/receipts/${input.receiptId}`);
   revalidatePath("/splits");
   redirect(`/splits/${data as string}`);
+}
+
+export async function createDetailedSplit(input: {
+  receiptId: string;
+  allocations: DetailedSplitItemInput[];
+  receiverPaymentMethodId?: string | null;
+}) {
+  const { supabase } = await getRequiredUser();
+
+  if (input.allocations.length === 0) {
+    return { error: "Add at least one allocated item." };
+  }
+
+  const { error } = await supabase.rpc("create_detailed_expense_splits", {
+    p_receipt_id: input.receiptId,
+    p_allocations: input.allocations.map((allocation) => ({
+      receipt_item_id: allocation.receiptItemId,
+      payer_share_amount: allocation.payerShareAmount,
+      shares: allocation.shares.map((share) => ({
+        participant_user_id: share.participantUserId,
+        owed_amount: share.owedAmount,
+      })),
+    })),
+    p_receiver_payment_method_id: input.receiverPaymentMethodId ?? null,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/receipts/${input.receiptId}`);
+  revalidatePath("/splits");
+  revalidatePath("/dashboard");
+  redirect(`/receipts/${input.receiptId}`);
 }
 
 export async function markShareSettled(formData: FormData): Promise<void> {

@@ -18,6 +18,7 @@ export type ReceiptLineInput = {
 
 export type CreateReceiptInput = {
   draftId?: string;
+  title?: string;
   storeId: string;
   purchasedAt: string;
   subtotal: number;
@@ -30,6 +31,7 @@ export type CreateReceiptInput = {
 
 export async function createReceipt(input: CreateReceiptInput) {
   const { supabase, user } = await getRequiredUser();
+  const receiptId = crypto.randomUUID();
 
   if (!input.storeId) {
     return { error: "Select a store." };
@@ -43,10 +45,12 @@ export async function createReceipt(input: CreateReceiptInput) {
     return { error: "Add at least one line item." };
   }
 
-  const { data: receipt, error: receiptError } = await supabase
+  const { error: receiptError } = await supabase
     .from("receipts")
     .insert({
+      id: receiptId,
       owner_user_id: user.id,
+      title: input.title?.trim() || null,
       store_id: input.storeId,
       purchased_at: input.purchasedAt,
       subtotal: input.subtotal,
@@ -54,16 +58,14 @@ export async function createReceipt(input: CreateReceiptInput) {
       total: input.total,
       notes: input.notes?.trim() || null,
       image_object_key: input.imageObjectKey || null,
-    })
-    .select("id")
-    .single();
+    });
 
-  if (receiptError || !receipt) {
+  if (receiptError) {
     return { error: receiptError?.message ?? "Could not create receipt." };
   }
 
   const itemRows = input.items.map((item, index) => ({
-    receipt_id: receipt.id,
+    receipt_id: receiptId,
     product_id: item.productId,
     line_number: index + 1,
     raw_name: item.rawName.trim(),
@@ -81,7 +83,7 @@ export async function createReceipt(input: CreateReceiptInput) {
     .insert(itemRows);
 
   if (itemsError) {
-    await supabase.from("receipts").delete().eq("id", receipt.id);
+    await supabase.from("receipts").delete().eq("id", receiptId);
     return { error: itemsError.message };
   }
 
@@ -95,7 +97,7 @@ export async function createReceipt(input: CreateReceiptInput) {
 
   revalidatePath("/receipts");
   revalidatePath("/dashboard");
-  redirect(`/receipts/${receipt.id}`);
+  redirect(`/receipts/${receiptId}`);
 }
 
 export async function deleteReceipt(formData: FormData): Promise<void> {

@@ -9,22 +9,24 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { getRequiredUser } from "@/lib/auth";
 import { formatDate, formatMoney } from "@/lib/format";
+import { receiptLabel } from "@/lib/receipt-label";
 import { getServerI18n } from "@/lib/server-preferences";
-import { relationName } from "@/lib/supabase-helpers";
 
 function toReceiptCard(
   receipt: {
     id: string;
+    title?: string | null;
     purchased_at: string;
     total: number | string;
-    stores: unknown;
+    stores?: { name?: string | null } | { name?: string | null }[] | null;
+    receipt_items?: { raw_name: string | null; line_number: number }[] | null;
   },
 ): ReceiptCardData {
   return {
     id: receipt.id,
     purchased_at: receipt.purchased_at,
     total: Number(receipt.total),
-    storeName: relationName(receipt.stores, "Unknown store"),
+    label: receiptLabel(receipt, "Receipt"),
   };
 }
 
@@ -67,7 +69,7 @@ export default async function DashboardPage() {
       .eq("owner_user_id", user.id),
     supabase
       .from("receipts")
-      .select("id, purchased_at, total, stores(name)")
+      .select("id, title, purchased_at, total, stores(name), receipt_items(raw_name, line_number)")
       .eq("owner_user_id", user.id)
       .order("purchased_at", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -116,9 +118,9 @@ export default async function DashboardPage() {
           href={drafts?.[0] ? `/receipts/new?draft=${drafts[0].id}` : "/receipts"}
           className="rounded-2xl border border-slate-300 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
         >
-          <p className="text-sm font-medium text-slate-900">Resume draft</p>
+          <p className="text-sm font-medium text-slate-900">{dict.dashboard.resumeDraftTitle}</p>
           <p className="mt-2 text-sm text-slate-600">
-            {drafts?.[0]?.title ?? "Open your saved draft list and continue on any device."}
+            {drafts?.[0]?.title ?? dict.dashboard.resumeDraftBody}
           </p>
         </Link>
         <Link
@@ -139,11 +141,11 @@ export default async function DashboardPage() {
 
       <section className="mb-8 grid gap-4 lg:grid-cols-3">
         <article className="rounded-lg border border-slate-300 bg-white p-5">
-          <p className="text-sm text-slate-500">Receipts logged</p>
+          <p className="text-sm text-slate-500">{dict.dashboard.receiptsLoggedLabel}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">{receiptCount ?? 0}</p>
         </article>
         <article className="rounded-lg border border-slate-300 bg-white p-5">
-          <p className="text-sm text-slate-500">Drafts ready</p>
+          <p className="text-sm text-slate-500">{dict.dashboard.draftsReadyLabel}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">{drafts?.length ?? 0}</p>
         </article>
         <article className="rounded-lg border border-slate-300 bg-white p-5">
@@ -152,8 +154,10 @@ export default async function DashboardPage() {
             {pendingProofShares?.length ?? 0}
           </p>
           <p className="mt-2 text-sm text-slate-500">
-            {(balances ?? []).length} netted balance pair
-            {(balances ?? []).length === 1 ? "" : "s"} still open.
+            {(balances ?? []).length}{" "}
+            {(balances ?? []).length === 1
+              ? dict.dashboard.nettedBalanceOpenSingular
+              : dict.dashboard.nettedBalanceOpenPlural}
           </p>
         </article>
       </section>
@@ -178,7 +182,7 @@ export default async function DashboardPage() {
               {recentReceipts.map((receipt) => (
                 <li key={receipt.id} className="flex items-center justify-between py-3">
                   <div>
-                    <p className="font-medium">{receipt.storeName}</p>
+                    <p className="font-medium">{receipt.label}</p>
                     <p className="text-sm text-slate-600">
                       {formatDate(receipt.purchased_at)}
                     </p>
@@ -212,7 +216,7 @@ export default async function DashboardPage() {
           {pendingProofShares && pendingProofShares.length > 0 ? (
             <div className="mt-4 space-y-3">
               <p className="text-sm text-slate-600">
-                Submitted payment slips are waiting for receiver review.
+                {dict.dashboard.submittedProofsWaiting}
               </p>
               <Link
                 href="/splits"

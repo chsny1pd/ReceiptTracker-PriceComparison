@@ -134,12 +134,24 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
   }
 
   const canManage = split.payer_user_id === user.id;
+  const ownShare = splitDetail.shares.find(
+    (share) => share.participant_user_id === user.id,
+  );
+  const visibleShares = canManage
+    ? splitDetail.shares
+    : ownShare
+      ? [ownShare]
+      : [];
   const proofsByShare = new Map<string, SharePaymentProof[]>();
 
   for (const proof of (rawProofs ?? []) as SharePaymentProof[]) {
     const existing = proofsByShare.get(proof.share_id) ?? [];
     existing.push(proof);
     proofsByShare.set(proof.share_id, existing);
+  }
+
+  if (!canManage && visibleShares.length === 0) {
+    notFound();
   }
 
   return (
@@ -159,10 +171,10 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-lg border border-slate-300 bg-white p-5">
+      <div className={`grid gap-6 ${canManage ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : ""}`}>
+        <section className="rounded-2xl border border-slate-300 bg-white p-5">
           <h2 className="text-lg font-semibold">{dict.splits.splitSummary}</h2>
-          <dl className="mt-4 space-y-3 text-sm">
+          <dl className={`mt-4 grid gap-4 text-sm ${canManage ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
             <div>
               <dt className="text-slate-600">{dict.splits.payer}</dt>
               <dd className="font-medium">
@@ -171,7 +183,7 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
                   splitDetail.payer_github_username,
                   splitDetail.payer_user_id,
                 )}
-                {splitDetail.payer_user_id === user.id ? " (you)" : ""}
+                {splitDetail.payer_user_id === user.id ? ` ${dict.common.you}` : ""}
               </dd>
             </div>
             <div>
@@ -201,83 +213,97 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
                 </Link>
               </dd>
             </div>
+            {!canManage && ownShare ? (
+              <div>
+                <dt className="text-slate-600">{dict.splits.owes}</dt>
+                <dd className="font-medium tabular-nums">
+                  {formatMoney(ownShare.owed_amount)}
+                </dd>
+              </div>
+            ) : null}
+            {!canManage && ownShare ? (
+              <div>
+                <dt className="text-slate-600">{dict.splits.status}</dt>
+                <dd className="font-medium">
+                  {ownShare.share_status === "confirmed"
+                    ? formatSettledAt(ownShare.settled_at, dict)
+                    : ownShare.share_status === "submitted"
+                      ? dict.splits.submitted
+                      : ownShare.share_status === "rejected"
+                        ? dict.splits.proofRejected
+                        : dict.splits.unpaid}
+                </dd>
+              </div>
+            ) : null}
           </dl>
-        </section>
-
-        <section className="rounded-lg border border-slate-300 bg-white p-5">
-          <h2 className="text-lg font-semibold">{dict.splits.rules}</h2>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
-            <li>{dict.splits.rules1}</li>
-            <li>{dict.splits.rules2}</li>
-            <li>{dict.splits.rules3}</li>
-            <li>{dict.splits.rules4}</li>
-          </ul>
         </section>
       </div>
 
-      <section className="mt-6 overflow-hidden rounded-lg border border-slate-300 bg-white">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-semibold">{dict.splits.participantShares}</h2>
-        </div>
-        <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50">
-            <tr>
-              <th className="px-4 py-3 font-medium">{dict.splits.participant}</th>
-              <th className="px-4 py-3 font-medium">{dict.splits.owes}</th>
-              <th className="px-4 py-3 font-medium">{dict.splits.status}</th>
-              <th className="px-4 py-3 font-medium">{dict.common.action}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {splitDetail.shares.map((share) => (
-              <tr key={share.id} className="border-b border-slate-100">
-                <td className="px-4 py-3">
-                  {profileLabel(
-                    share.participant_display_name,
-                    share.participant_github_username,
-                    share.participant_user_id,
-                  )}
-                  {share.participant_user_id === user.id ? " (you)" : ""}
-                </td>
-                <td className="px-4 py-3 tabular-nums">
-                  {formatMoney(share.owed_amount)}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={
-                      share.share_status === "confirmed"
-                        ? "text-emerald-700"
-                        : share.share_status === "submitted"
-                          ? "text-sky-700"
-                          : share.share_status === "rejected"
-                            ? "text-red-700"
-                            : "text-amber-700"
-                    }
-                  >
-                    {share.share_status === "confirmed"
-                      ? formatSettledAt(share.settled_at)
-                      : share.share_status === "submitted"
-                        ? dict.splits.submitted
-                        : share.share_status === "rejected"
-                          ? dict.splits.proofRejected
-                          : dict.splits.unpaid}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  {share.share_status !== "confirmed" && canManage ? (
-                    <SettleShareButton shareId={share.id} splitId={split.id} />
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
-                </td>
+      {canManage ? (
+        <section className="mt-6 overflow-hidden rounded-2xl border border-slate-300 bg-white">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h2 className="text-lg font-semibold">{dict.splits.participantShares}</h2>
+          </div>
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50">
+              <tr>
+                <th className="px-4 py-3 font-medium">{dict.splits.participant}</th>
+                <th className="px-4 py-3 font-medium">{dict.splits.owes}</th>
+                <th className="px-4 py-3 font-medium">{dict.splits.status}</th>
+                <th className="px-4 py-3 font-medium">{dict.common.action}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {visibleShares.map((share) => (
+                <tr key={share.id} className="border-b border-slate-100">
+                  <td className="px-4 py-3">
+                    {profileLabel(
+                      share.participant_display_name,
+                      share.participant_github_username,
+                      share.participant_user_id,
+                    )}
+                    {share.participant_user_id === user.id ? ` ${dict.common.you}` : ""}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums">
+                    {formatMoney(share.owed_amount)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={
+                        share.share_status === "confirmed"
+                          ? "text-emerald-700"
+                          : share.share_status === "submitted"
+                            ? "text-sky-700"
+                            : share.share_status === "rejected"
+                              ? "text-red-700"
+                              : "text-amber-700"
+                      }
+                    >
+                      {share.share_status === "confirmed"
+                        ? formatSettledAt(share.settled_at, dict)
+                        : share.share_status === "submitted"
+                          ? dict.splits.submitted
+                          : share.share_status === "rejected"
+                            ? dict.splits.proofRejected
+                            : dict.splits.unpaid}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {share.share_status !== "confirmed" ? (
+                      <SettleShareButton shareId={share.id} splitId={split.id} />
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
 
       <section className="mt-6 space-y-6">
-        {splitDetail.shares.map((share) => (
+        {visibleShares.map((share) => (
           <PaymentProofPanel
             key={share.id}
             splitId={split.id}

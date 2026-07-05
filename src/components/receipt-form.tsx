@@ -470,6 +470,7 @@ export function ReceiptForm({
       clearLocalReceiptDraft();
       const result = await createReceipt({
         draftId: draftId ?? undefined,
+        title,
         storeId,
         purchasedAt,
         subtotal: computedSubtotal,
