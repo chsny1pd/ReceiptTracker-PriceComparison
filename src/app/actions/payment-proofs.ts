@@ -37,7 +37,9 @@ export async function submitPaymentProof(formData: FormData) {
   return { success: true };
 }
 
-export async function reviewPaymentProof(formData: FormData) {
+export async function reviewPaymentProof(
+  formData: FormData,
+): Promise<{ error?: string; success?: true }> {
   const { supabase } = await getRequiredUser();
 
   const shareId = String(formData.get("shareId") ?? "");
@@ -45,7 +47,7 @@ export async function reviewPaymentProof(formData: FormData) {
   const action = String(formData.get("action") ?? "");
 
   if (!shareId || !splitId || (action !== "confirm" && action !== "reject")) {
-    throw new Error("Proof review payload is invalid.");
+    return { error: "Proof review payload is invalid." };
   }
 
   const { error } = await supabase.rpc("review_share_payment_proof", {
@@ -54,10 +56,11 @@ export async function reviewPaymentProof(formData: FormData) {
   });
 
   if (error) {
-    throw new Error(error.message);
+    return { error: error.message };
   }
 
   revalidatePath(`/splits/${splitId}`);
   revalidatePath("/splits");
   revalidatePath("/dashboard");
+  return { success: true };
 }

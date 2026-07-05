@@ -3,13 +3,11 @@ import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
 import { PaymentProofPanel } from "@/components/splits/payment-proof-panel";
-import {
-  formatSettledAt,
-  SettleShareButton,
-} from "@/components/splits/settle-share-button";
+import { SettleShareButton } from "@/components/splits/settle-share-button";
 import { getRequiredUser } from "@/lib/auth";
 import { formatDate, formatMoney } from "@/lib/format";
 import { getServerI18n } from "@/lib/server-preferences";
+import { formatSettledAt } from "@/lib/split-labels";
 import type {
   ProfileOption,
   SharePaymentProof,
@@ -308,6 +306,7 @@ export default async function SplitDetailPage({ params }: SplitDetailPageProps) 
             key={share.id}
             splitId={split.id}
             share={share}
+            payerUserId={split.payer_user_id}
             currentUserId={user.id}
             receiverPaymentMethod={(paymentMethod as UserPaymentMethod | null) ?? null}
             proofs={proofsByShare.get(share.id) ?? []}

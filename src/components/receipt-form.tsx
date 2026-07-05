@@ -12,6 +12,7 @@ import {
 import { AddProductModal } from "@/components/add-product-modal";
 import { FormErrorSummary } from "@/components/form-error-summary";
 import { Modal } from "@/components/ui/modal";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { PendingNotice } from "@/components/ui/pending-notice";
 import { Spinner } from "@/components/ui/spinner";
 import { consumeCompareCartReceiptDraft } from "@/lib/compare-cart";
@@ -45,6 +46,7 @@ type DraftLine = {
   lineTotal: string;
   imageObjectKey: string | null;
   imageName: string | null;
+  imagePreviewUrl: string | null;
 };
 
 type ReceiptFormProps = {
@@ -65,6 +67,7 @@ function emptyLine(products: Product[]): DraftLine {
     lineTotal: "0",
     imageObjectKey: null,
     imageName: null,
+    imagePreviewUrl: null,
   };
 }
 
@@ -78,6 +81,7 @@ function lineFromDraft(line: ReceiptDraftLine): DraftLine {
     lineTotal: line.lineTotal,
     imageObjectKey: line.imageObjectKey,
     imageName: line.imageName,
+    imagePreviewUrl: null,
   };
 }
 
@@ -107,6 +111,7 @@ function draftLineToState(
     lineTotal: line.lineTotal,
     imageObjectKey: null,
     imageName: null,
+    imagePreviewUrl: null,
   }));
 }
 
@@ -151,6 +156,7 @@ export function ReceiptForm({
   const [imageName, setImageName] = useState<string | null>(
     effectiveInitialDraft?.imageName ?? null,
   );
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingLineKey, setUploadingLineKey] = useState<string | null>(null);
   const [lines, setLines] = useState<DraftLine[]>(() => {
@@ -314,6 +320,7 @@ export function ReceiptForm({
           lineTotal: "0",
           imageObjectKey: null,
           imageName: null,
+          imagePreviewUrl: null,
         },
       ]);
     }
@@ -329,13 +336,25 @@ export function ReceiptForm({
     });
   }
 
+  function clearReceiptImage() {
+    if (imagePreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setImagePreviewUrl(null);
+    setImageObjectKey(null);
+    setImageName(null);
+  }
+
   async function handleImageChange(file: File | null) {
     if (!file) {
-      setImageObjectKey(null);
-      setImageName(null);
+      clearReceiptImage();
       return;
     }
 
+    if (imagePreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setImagePreviewUrl(URL.createObjectURL(file));
     setUploadingImage(true);
     setError(null);
 
@@ -355,7 +374,7 @@ export function ReceiptForm({
         error?: string;
       };
 
-      if (!presignResponse.ok || !presignPayload.uploadUrl) {
+      if (!presignResponse.ok || !presignPayload.uploadUrl || !presignPayload.objectKey) {
         throw new Error(presignPayload.error ?? "Could not prepare image upload.");
       }
 
@@ -372,24 +391,42 @@ export function ReceiptForm({
       setImageObjectKey(presignPayload.objectKey ?? null);
       setImageName(compressedFile.name);
     } catch (uploadError) {
-      setImageObjectKey(null);
-      setImageName(null);
+      clearReceiptImage();
       setError(
         uploadError instanceof Error
           ? uploadError.message
-          : "Image upload failed.",
+          : dict.common.imageUploadFailed,
       );
     } finally {
       setUploadingImage(false);
     }
   }
 
+  function clearLineImage(lineKey: string) {
+    const line = lines.find((entry) => entry.key === lineKey);
+    if (line?.imagePreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(line.imagePreviewUrl);
+    }
+    updateLine(lineKey, {
+      imageObjectKey: null,
+      imageName: null,
+      imagePreviewUrl: null,
+    });
+  }
+
   async function handleLineImageChange(lineKey: string, file: File | null) {
     if (!file) {
-      updateLine(lineKey, { imageObjectKey: null, imageName: null });
+      clearLineImage(lineKey);
       return;
     }
 
+    const line = lines.find((entry) => entry.key === lineKey);
+    if (line?.imagePreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(line.imagePreviewUrl);
+    }
+    updateLine(lineKey, {
+      imagePreviewUrl: URL.createObjectURL(file),
+    });
     setUploadingLineKey(lineKey);
     setError(null);
 
@@ -430,11 +467,11 @@ export function ReceiptForm({
         imageName: compressedFile.name,
       });
     } catch (uploadError) {
-      updateLine(lineKey, { imageObjectKey: null, imageName: null });
+      clearLineImage(lineKey);
       setError(
         uploadError instanceof Error
           ? uploadError.message
-          : "Item image upload failed.",
+          : dict.common.imageUploadFailed,
       );
     } finally {
       setUploadingLineKey(null);
@@ -609,29 +646,23 @@ export function ReceiptForm({
                 className="rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
-            <label className="grid gap-2 text-sm md:col-span-2">
+            <div className="grid gap-2 text-sm md:col-span-2">
               <span className="font-medium">{dict.receipts.receiptImage}</span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                disabled={uploadingImage}
-                onChange={(event) =>
-                  void handleImageChange(event.target.files?.[0] ?? null)
-                }
-                className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-60"
+              <ImageUploadField
+                fileInputId="receipt-image-upload"
+                disabled={isPending}
+                uploading={uploadingImage}
+                previewUrl={imagePreviewUrl}
+                imageName={imageName}
+                onFileSelect={(file) => void handleImageChange(file)}
+                onRemove={clearReceiptImage}
+                chooseLabel={dict.receipts.chooseReceiptImage}
+                replaceLabel={dict.receipts.replaceReceiptImage}
+                uploadingLabel={dict.receipts.compressingUpload}
+                removeLabel={dict.common.removeImage}
+                helpText={dict.receipts.receiptImageHelp}
               />
-              {uploadingImage ? (
-                <span className="inline-flex items-center gap-2 text-sm text-slate-500">
-                  <Spinner size="sm" />
-                  {dict.receipts.compressingUpload}
-                </span>
-              ) : null}
-              {imageName ? (
-                <span className="text-sm text-emerald-700">
-                  {dict.common.uploaded}: {imageName}
-                </span>
-              ) : null}
-            </label>
+            </div>
           </div>
         </section>
 
@@ -802,32 +833,23 @@ export function ReceiptForm({
                           : dict.receipts.enterQuantityAndTotal}
                       </p>
                     </div>
-                    <label className="grid gap-2 text-sm md:col-span-2">
+                    <div className="grid gap-2 text-sm md:col-span-2">
                       <span className="font-medium">{dict.receipts.itemImage}</span>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        disabled={uploadingLineKey === line.key}
-                        onChange={(event) =>
-                          void handleLineImageChange(
-                            line.key,
-                            event.target.files?.[0] ?? null,
-                          )
-                        }
-                        className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-60"
+                      <ImageUploadField
+                        fileInputId={`line-image-${line.key}`}
+                        disabled={isPending}
+                        uploading={uploadingLineKey === line.key}
+                        previewUrl={line.imagePreviewUrl}
+                        imageName={line.imageName}
+                        onFileSelect={(file) => void handleLineImageChange(line.key, file)}
+                        onRemove={() => clearLineImage(line.key)}
+                        chooseLabel={dict.receipts.chooseItemImage}
+                        replaceLabel={dict.receipts.replaceItemImage}
+                        uploadingLabel={dict.receipts.compressingUpload}
+                        removeLabel={dict.common.removeImage}
+                        helpText={dict.receipts.itemImageHelp}
                       />
-                      {uploadingLineKey === line.key ? (
-                        <span className="inline-flex items-center gap-2 text-sm text-slate-500">
-                          <Spinner size="sm" />
-                          {dict.receipts.compressingUpload}
-                        </span>
-                      ) : null}
-                      {line.imageName ? (
-                        <span className="text-sm text-emerald-700">
-                          {dict.common.uploaded}: {line.imageName}
-                        </span>
-                      ) : null}
-                    </label>
+                    </div>
                   </div>
                   {product &&
                   unitCategoryForUnit(line.unit) !== product.unit_category ? (

@@ -8,6 +8,8 @@ import {
 } from "@/app/actions/payment-proofs";
 import { useAppPreferences } from "@/components/app-preferences-provider";
 import { FormErrorSummary } from "@/components/form-error-summary";
+import { PaymentProofImageLink } from "@/components/payment-proof-image-link";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { compressImageIfNeeded } from "@/lib/client-image";
 import { formatDate } from "@/lib/format";
 import type { SharePaymentProof, SplitShareDetail, UserPaymentMethod } from "@/lib/types";
@@ -15,6 +17,7 @@ import type { SharePaymentProof, SplitShareDetail, UserPaymentMethod } from "@/l
 type PaymentProofPanelProps = {
   splitId: string;
   share: SplitShareDetail;
+  payerUserId: string;
   currentUserId: string;
   receiverPaymentMethod: UserPaymentMethod | null;
   proofs: SharePaymentProof[];
@@ -44,6 +47,7 @@ function statusLabel(
 export function PaymentProofPanel({
   splitId,
   share,
+  payerUserId,
   currentUserId,
   receiverPaymentMethod,
   proofs,
@@ -54,6 +58,7 @@ export function PaymentProofPanel({
   const [note, setNote] = useState("");
   const [imageObjectKey, setImageObjectKey] = useState("");
   const [imageName, setImageName] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputId = `payment-slip-${share.id}`;
   const panelId = `share-payment-${share.id}`;
@@ -62,14 +67,23 @@ export function PaymentProofPanel({
   const isParticipant = currentUserId === share.participant_user_id;
   const canSubmit = isParticipant && share.share_status !== "confirmed";
   const canReview =
-    currentUserId !== share.participant_user_id &&
+    currentUserId === payerUserId &&
     latestProof?.review_status === "submitted";
-  const shareOwnerLabel =
-    share.participant_display_name ??
-    share.participant_github_username ??
-    share.participant_user_id;
+
+  function clearSelectedImage() {
+    if (previewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
+    setImageObjectKey("");
+    setImageName(null);
+  }
 
   async function handleUpload(file: File) {
+    if (previewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(URL.createObjectURL(file));
     setUploading(true);
     setError(null);
 
@@ -112,6 +126,7 @@ export function PaymentProofPanel({
       setImageObjectKey(presignPayload.objectKey);
       setImageName(compressed.name);
     } catch (uploadError) {
+      clearSelectedImage();
       setError(
         uploadError instanceof Error
           ? uploadError.message
@@ -139,8 +154,7 @@ export function PaymentProofPanel({
         return;
       }
       setNote("");
-      setImageObjectKey("");
-      setImageName(null);
+      clearSelectedImage();
     });
   }
 
@@ -155,9 +169,18 @@ export function PaymentProofPanel({
     formData.set("action", action);
 
     startTransition(async () => {
-      await reviewPaymentProof(formData);
+      setError(null);
+      const result = await reviewPaymentProof(formData);
+      if (result?.error) {
+        setError(result.error);
+      }
     });
   }
+
+  const shareOwnerLabel =
+    share.participant_display_name ??
+    share.participant_github_username ??
+    share.participant_user_id;
 
   return (
     <section
@@ -250,49 +273,29 @@ export function PaymentProofPanel({
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <FormErrorSummary message={error} />
           <div className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/50 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="text-base font-semibold text-slate-950">
-                  {dict.splits.readyToUploadSlip}
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {dict.splits.readyToUploadSlipBody}
-                </p>
-              </div>
-              {imageName ? (
-                <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-medium text-emerald-700 shadow-sm">
-                  {dict.common.uploaded}: {imageName}
-                </span>
-              ) : null}
+            <div className="mb-4">
+              <p className="text-base font-semibold text-slate-950">
+                {dict.splits.readyToUploadSlip}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                {dict.splits.readyToUploadSlipBody}
+              </p>
             </div>
 
-            <label
-              htmlFor={fileInputId}
-              className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-emerald-300 bg-white px-5 py-8 text-center transition hover:border-emerald-500 hover:bg-emerald-50"
-            >
-              <span className="text-sm font-semibold text-emerald-800">
-                {uploading
-                  ? dict.splits.uploadingSlip
-                  : imageName
-                    ? dict.splits.replaceSlip
-                    : dict.splits.chooseSlip}
-              </span>
-              <span className="mt-2 max-w-md text-xs text-slate-500">
-                {imageName ? dict.splits.slipSelectedHelp : dict.splits.compressionHelp}
-              </span>
-            </label>
-            <input
-              id={fileInputId}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  void handleUpload(file);
-                }
-              }}
-              className="sr-only"
-              disabled={uploading}
+            <ImageUploadField
+              fileInputId={fileInputId}
+              disabled={isPending}
+              uploading={uploading}
+              previewUrl={previewUrl}
+              imageName={imageName}
+              onFileSelect={(file) => void handleUpload(file)}
+              onRemove={clearSelectedImage}
+              chooseLabel={dict.splits.chooseSlip}
+              replaceLabel={dict.splits.replaceSlip}
+              uploadingLabel={dict.splits.uploadingSlip}
+              removeLabel={dict.common.removeImage}
+              helpText={dict.splits.compressionHelp}
+              selectedHelpText={dict.splits.slipSelectedHelp}
             />
           </div>
           <label className="grid gap-2 text-sm">
@@ -330,17 +333,16 @@ export function PaymentProofPanel({
           {latestProof.note ? (
             <p className="mt-2 text-sm text-slate-600">{latestProof.note}</p>
           ) : null}
-          <a
-            href={`/api/payment-proofs/${latestProof.id}`}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-flex text-sm font-medium text-emerald-700"
-          >
-            {dict.splits.openUploadedProof}
-          </a>
+          <div className="mt-3">
+            <PaymentProofImageLink
+              proofId={latestProof.id}
+              label={dict.splits.openUploadedProof}
+            />
+          </div>
 
           {canReview ? (
             <div className="mt-4 space-y-3">
+              <FormErrorSummary message={error} />
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"

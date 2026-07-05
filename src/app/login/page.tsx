@@ -11,30 +11,32 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const { dict } = await getServerI18n();
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
+    <main data-page="login" className="min-h-screen px-6 py-10">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md flex-col justify-center">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-emerald-300">
-          Spendly
-        </p>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-          {dict.auth.signInTitle}
-        </h1>
-        <p className="mt-4 text-base leading-7 text-slate-300">
-          {dict.auth.signInBody}
-        </p>
-
-        {params.error === "oauth" ? (
-          <p className="mt-6 rounded-lg border border-red-400/40 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-            {dict.auth.oauthError}
+        <div className="login-card rounded-2xl border p-8">
+          <p className="login-brand text-sm font-medium uppercase tracking-[0.2em]">
+            Spendly
           </p>
-        ) : null}
+          <h1 className="login-heading mt-4 text-4xl font-semibold tracking-tight">
+            {dict.auth.signInTitle}
+          </h1>
+          <p className="login-body mt-4 text-base leading-7">
+            {dict.auth.signInBody}
+          </p>
 
-        <Link
-          href="/auth/sign-in"
-          className="mt-8 inline-flex h-12 items-center justify-center rounded-lg bg-emerald-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
-        >
-          {dict.auth.signInCta}
-        </Link>
+          {params.error === "oauth" ? (
+            <p className="login-error mt-6 rounded-lg border px-4 py-3 text-sm">
+              {dict.auth.oauthError}
+            </p>
+          ) : null}
+
+          <Link
+            href="/auth/sign-in"
+            className="login-button mt-8 inline-flex h-12 w-full items-center justify-center rounded-lg px-5 text-sm font-semibold transition"
+          >
+            {dict.auth.signInCta}
+          </Link>
+        </div>
       </div>
     </main>
   );

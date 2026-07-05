@@ -111,12 +111,14 @@ export async function createDetailedSplit(input: {
   redirect(`/receipts/${input.receiptId}`);
 }
 
-export async function markShareSettled(formData: FormData): Promise<void> {
+export async function markShareSettled(
+  formData: FormData,
+): Promise<{ error?: string; success?: true }> {
   const shareId = String(formData.get("shareId") ?? "");
   const splitId = String(formData.get("splitId") ?? "");
 
   if (!shareId || !splitId) {
-    throw new Error("Share id and split id are required.");
+    return { error: "Share id and split id are required." };
   }
 
   const { supabase } = await getRequiredUser();
@@ -125,9 +127,11 @@ export async function markShareSettled(formData: FormData): Promise<void> {
   });
 
   if (error) {
-    throw new Error(error.message);
+    return { error: error.message };
   }
 
   revalidatePath(`/splits/${splitId}`);
   revalidatePath("/splits");
+  revalidatePath("/dashboard");
+  return { success: true };
 }

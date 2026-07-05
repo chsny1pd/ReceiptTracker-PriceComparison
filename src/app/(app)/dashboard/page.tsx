@@ -81,8 +81,9 @@ export default async function DashboardPage() {
       .limit(3),
     supabase
       .from("expense_split_shares")
-      .select("id")
+      .select("id, expense_splits!inner(payer_user_id)")
       .eq("share_status", "submitted")
+      .eq("expense_splits.payer_user_id", user.id)
       .limit(20),
     supabase.rpc("get_current_balances"),
   ]);
@@ -124,22 +125,22 @@ export default async function DashboardPage() {
           </p>
         </Link>
         <Link
-          href="/splits"
-          className="rounded-2xl border border-slate-300 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
+          href="/splits#action-queue"
+          className="rounded-2xl border border-sky-300 bg-sky-50 p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
         >
-          <p className="text-sm font-medium text-slate-900">{dict.common.reviewProofs}</p>
-          <p className="mt-2 text-sm text-slate-600">{dict.dashboard.proofBlurb}</p>
+          <p className="text-sm font-medium text-sky-900">{dict.dashboard.verifySlipsTitle}</p>
+          <p className="mt-2 text-sm text-sky-800">{dict.dashboard.proofBlurb}</p>
         </Link>
         <Link
-          href="/splits"
-          className="rounded-2xl border border-slate-300 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
+          href="/splits#balances"
+          className="rounded-2xl border border-amber-300 bg-amber-50 p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
         >
-          <p className="text-sm font-medium text-slate-900">{dict.common.debts}</p>
-          <p className="mt-2 text-sm text-slate-600">{dict.dashboard.debtBlurb}</p>
+          <p className="text-sm font-medium text-amber-900">{dict.common.debts}</p>
+          <p className="mt-2 text-sm text-amber-800">{dict.dashboard.debtBlurb}</p>
         </Link>
       </section>
 
-      <section className="mb-8 grid gap-4 lg:grid-cols-3">
+      <section className="mb-8 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-lg border border-slate-300 bg-white p-5">
           <p className="text-sm text-slate-500">{dict.dashboard.receiptsLoggedLabel}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">{receiptCount ?? 0}</p>
@@ -148,13 +149,18 @@ export default async function DashboardPage() {
           <p className="text-sm text-slate-500">{dict.dashboard.draftsReadyLabel}</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">{drafts?.length ?? 0}</p>
         </article>
-        <article className="rounded-lg border border-slate-300 bg-white p-5">
-          <p className="text-sm text-slate-500">{dict.dashboard.pendingProofs}</p>
-          <p className="mt-2 text-3xl font-semibold tabular-nums">
+        <article className="rounded-lg border border-sky-200 bg-sky-50 p-5">
+          <p className="text-sm text-sky-800">{dict.dashboard.pendingProofs}</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums text-sky-950">
             {pendingProofShares?.length ?? 0}
           </p>
-          <p className="mt-2 text-sm text-slate-500">
-            {(balances ?? []).length}{" "}
+        </article>
+        <article className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+          <p className="text-sm text-amber-800">{dict.dashboard.openBalancesLabel}</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums text-amber-950">
+            {(balances ?? []).length}
+          </p>
+          <p className="mt-2 text-sm text-amber-800/80">
             {(balances ?? []).length === 1
               ? dict.dashboard.nettedBalanceOpenSingular
               : dict.dashboard.nettedBalanceOpenPlural}
@@ -211,24 +217,45 @@ export default async function DashboardPage() {
             </p>
           )}
         </div>
-        <div className="rounded-lg border border-slate-300 bg-white p-5">
-          <h2 className="text-lg font-semibold">{dict.dashboard.pendingProofs}</h2>
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-5">
+          <h2 className="text-lg font-semibold text-sky-950">{dict.dashboard.verifySlipsTitle}</h2>
+          <p className="mt-2 text-sm text-sky-900/90">{dict.dashboard.proofPurposeExplain}</p>
           {pendingProofShares && pendingProofShares.length > 0 ? (
             <div className="mt-4 space-y-3">
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-sky-800">
                 {dict.dashboard.submittedProofsWaiting}
               </p>
               <Link
-                href="/splits"
+                href="/splits#action-queue"
                 className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-700 px-5 text-sm font-semibold text-white"
               >
                 {dict.common.reviewProofs}
               </Link>
             </div>
           ) : (
-            <p className="mt-4 text-sm text-slate-600">
-              {dict.dashboard.noPendingProofs}
-            </p>
+            <p className="mt-4 text-sm text-sky-800">{dict.dashboard.noPendingProofs}</p>
+          )}
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+          <h2 className="text-lg font-semibold text-amber-950">{dict.common.debts}</h2>
+          <p className="mt-2 text-sm text-amber-900/90">{dict.dashboard.debtPurposeExplain}</p>
+          {(balances ?? []).length > 0 ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm text-amber-800">
+                {(balances ?? []).length}{" "}
+                {(balances ?? []).length === 1
+                  ? dict.dashboard.nettedBalanceOpenSingular
+                  : dict.dashboard.nettedBalanceOpenPlural}
+              </p>
+              <Link
+                href="/splits#balances"
+                className="inline-flex h-11 items-center justify-center rounded-lg border border-amber-400 bg-white px-5 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+              >
+                {dict.common.debts}
+              </Link>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-amber-800">{dict.splits.noNettedBalances}</p>
           )}
         </div>
       </section>

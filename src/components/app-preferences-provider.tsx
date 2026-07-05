@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   createContext,
   useContext,
@@ -59,6 +60,7 @@ export function AppPreferencesProvider({
   initialLocale: Locale;
   initialTheme: ThemePreference;
 }) {
+  const router = useRouter();
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
   const [theme, setThemeState] = useState<ThemePreference>(initialTheme);
 
@@ -71,7 +73,8 @@ export function AppPreferencesProvider({
   useEffect(() => {
     document.documentElement.lang = locale;
     writeCookie(LOCALE_COOKIE_NAME, locale);
-  }, [locale]);
+    router.refresh();
+  }, [locale, router]);
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-color-scheme: dark)");

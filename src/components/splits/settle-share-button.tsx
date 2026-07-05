@@ -1,13 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import { markShareSettled } from "@/app/actions/splits";
 import { useAppPreferences } from "@/components/app-preferences-provider";
-import { formatDate } from "@/lib/format";
+import { FormErrorSummary } from "@/components/form-error-summary";
 import { PendingNotice } from "@/components/ui/pending-notice";
 import { Spinner } from "@/components/ui/spinner";
-import type { Dictionary } from "@/lib/i18n";
 
 type SettleShareButtonProps = {
   shareId: string;
@@ -22,15 +21,23 @@ export function SettleShareButton({
 }: SettleShareButtonProps) {
   const { dict } = useAppPreferences();
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <>
       <PendingNotice show={isPending} message={dict.splits.markingSettled} />
       <form
         action={(formData) => {
-          startTransition(() => markShareSettled(formData));
+          setError(null);
+          startTransition(async () => {
+            const result = await markShareSettled(formData);
+            if (result?.error) {
+              setError(result.error);
+            }
+          });
         }}
       >
+        <FormErrorSummary message={error} />
         <input type="hidden" name="shareId" value={shareId} />
         <input type="hidden" name="splitId" value={splitId} />
         <button
@@ -50,12 +57,4 @@ export function SettleShareButton({
       </form>
     </>
   );
-}
-
-export function formatSettledAt(value: string | null, dict: Dictionary) {
-  if (!value) {
-    return dict.splits.unsettledLabel;
-  }
-
-  return `${dict.splits.settledOnPrefix} ${formatDate(value.slice(0, 10))}`;
 }

@@ -173,7 +173,7 @@ export default async function SplitsPage() {
         </article>
       </section>
 
-      <section className="mt-8">
+      <section id="balances" className="mt-8 scroll-mt-24">
         <h2 className="mb-4 text-lg font-semibold">{dict.splits.nettedBalances}</h2>
         <BalancesOverview
           balances={(balances ?? []) as BalanceRow[]}
@@ -183,7 +183,7 @@ export default async function SplitsPage() {
         />
       </section>
 
-      <section className="mt-8">
+      <section id="action-queue" className="mt-8 scroll-mt-24">
         <h2 className="mb-4 text-lg font-semibold">{dict.splits.actionQueue}</h2>
         <UnsettledSharesPanel
           shares={actionQueueShares}

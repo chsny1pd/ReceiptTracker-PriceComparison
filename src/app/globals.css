@@ -184,6 +184,145 @@ html[data-theme="dark"] .text-sky-700 {
   color: #7dd3fc;
 }
 
+html.dark .bg-sky-50,
+html[data-theme="dark"] .bg-sky-50 {
+  background-color: rgba(12, 74, 110, 0.45);
+}
+
+html.dark .text-sky-900,
+html[data-theme="dark"] .text-sky-900 {
+  color: #bae6fd;
+}
+
+html.dark .border-sky-200,
+html[data-theme="dark"] .border-sky-200 {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+html.dark .bg-slate-900,
+html.dark .bg-slate-900\/90,
+html[data-theme="dark"] .bg-slate-900,
+html[data-theme="dark"] .bg-slate-900\/90 {
+  background-color: #0f172a;
+}
+
+html.dark .border-slate-700,
+html.dark .border-slate-700\/80,
+html[data-theme="dark"] .border-slate-700,
+html[data-theme="dark"] .border-slate-700\/80 {
+  border-color: #334155;
+}
+
+[data-page="login"] {
+  --login-bg: #ffffff;
+  --login-heading: #0f172a;
+  --login-body: #475569;
+  --login-brand: #047857;
+  --login-card-bg: #ffffff;
+  --login-card-border: #e2e8f0;
+  --login-card-shadow: 0 1px 3px 0 rgb(15 23 42 / 0.1);
+  --login-button-bg: #059669;
+  --login-button-fg: #ffffff;
+  --login-button-hover: #047857;
+  --login-button-focus: #047857;
+  --login-error-border: #fca5a5;
+  --login-error-bg: #fef2f2;
+  --login-error-text: #991b1b;
+  background-color: var(--login-bg);
+  color: var(--login-heading);
+}
+
+html.dark [data-page="login"],
+html[data-theme="dark"] [data-page="login"] {
+  --login-bg: #020617;
+  --login-heading: #ffffff;
+  --login-body: #cbd5e1;
+  --login-brand: #6ee7b7;
+  --login-card-bg: transparent;
+  --login-card-border: transparent;
+  --login-card-shadow: none;
+  --login-button-bg: #34d399;
+  --login-button-fg: #020617;
+  --login-button-hover: #6ee7b7;
+  --login-button-focus: #6ee7b7;
+  --login-error-border: rgb(248 113 113 / 0.4);
+  --login-error-bg: rgb(127 29 29 / 0.4);
+  --login-error-text: #fecaca;
+}
+
+[data-page="login"] .login-card {
+  background-color: var(--login-card-bg);
+  border-color: var(--login-card-border);
+  box-shadow: var(--login-card-shadow);
+}
+
+[data-page="login"] .login-brand {
+  color: var(--login-brand);
+}
+
+[data-page="login"] .login-heading {
+  color: var(--login-heading);
+}
+
+[data-page="login"] .login-body {
+  color: var(--login-body);
+}
+
+[data-page="login"] .login-button {
+  background-color: var(--login-button-bg);
+  color: var(--login-button-fg);
+}
+
+[data-page="login"] .login-button:hover {
+  background-color: var(--login-button-hover);
+}
+
+[data-page="login"] .login-button:focus-visible {
+  outline: 2px solid var(--login-button-focus);
+  outline-offset: 2px;
+}
+
+[data-page="login"] .login-error {
+  border-color: var(--login-error-border);
+  background-color: var(--login-error-bg);
+  color: var(--login-error-text);
+}
+
+html.dark .border-amber-200,
+html[data-theme="dark"] .border-amber-200 {
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+html.dark .border-amber-300,
+html.dark .border-amber-400,
+html[data-theme="dark"] .border-amber-300,
+html[data-theme="dark"] .border-amber-400 {
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+html.dark .border-sky-300,
+html[data-theme="dark"] .border-sky-300 {
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+html.dark .text-sky-950,
+html.dark .text-sky-900,
+html.dark .text-sky-800,
+html[data-theme="dark"] .text-sky-950,
+html[data-theme="dark"] .text-sky-900,
+html[data-theme="dark"] .text-sky-800 {
+  color: #bae6fd;
+}
+
+html.dark .text-amber-950,
+html.dark .text-amber-900,
+html.dark .text-amber-800,
+html[data-theme="dark"] .text-amber-950,
+html[data-theme="dark"] .text-amber-900,
+html[data-theme="dark"] .text-amber-800 {
+  color: #fcd34d;
+}
+
 html.dark input,
 html.dark select,
 html.dark textarea,
